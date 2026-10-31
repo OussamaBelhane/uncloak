@@ -75,12 +75,13 @@ def main(args: Optional[list[str]] = None) -> int:
     parser = build_parser()
     parsed_args = parser.parse_args(args)
     
-    if not parsed_args.live and not parsed_args.read:
-        parser.print_help()
+    if parsed_args.json:
+        print(f"[*] Uncloak v0.1.0 headless NDJSON streaming initialized (Filter: '{parsed_args.filter}')")
         return 0
-        
-    print(f"[*] Uncloak v0.1.0 initialized (Filter: '{parsed_args.filter}', Threshold: {parsed_args.threshold})")
-    return 0
+
+    # Direct Sovereign Cockpit Execution (Htop / K9s Standard)
+    from uncloak.ui.cockpit import run_cockpit
+    return run_cockpit(demo_mode=True)
 
 
 if __name__ == "__main__":
