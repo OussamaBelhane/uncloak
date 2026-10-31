@@ -1,6 +1,7 @@
 """
 Interactive live runner and event loop for the Uncloak CUI cockpit.
 Handles non-blocking cross-platform keyboard input and zero-flicker rendering.
+Strictly mirrors the HTML master architecture.
 """
 
 import os
@@ -15,36 +16,91 @@ from uncloak.ui.layout import CockpitState, FlowEntry, build_cockpit_layout
 
 
 def get_demo_flows() -> list[FlowEntry]:
-    """Generates realistic demonstration flows for terminal testing."""
+    """Generates realistic demonstration flows matching the HTML master specification."""
     return [
         FlowEntry(
             flow_id="f1",
-            pid=4812,
+            pid=5824,
+            process_name="update.exe",
+            is_signed=False,
+            dst_ip="193.26.158.114",
+            dst_port=443,
+            sni="",
+            interval_str="8.4s",
+            sparkline="▄▆▅▆▇▅▆▆",
+            jitter_str="±0.8s",
+            jitter_pct="9.5%",
+            payload_str="512 B",
+            threat_score=0.987,
+            threat_label="CRIT",
+            is_threat=True,
+            binary_path=r"C:\Users\Target\AppData\Roaming\update.exe",
+            sig_info="Unsigned PE",
+            sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            bursts="14 bursts / 2m",
+            user_context="CORP\\jdoe (Standard)",
+            is_severed=False,
+            mitre_technique="T1071.001 (Web C2)",
+            state="ESTABLISHED",
+            packets=182,
+            bytes_transferred=51688,
+        ),
+        FlowEntry(
+            flow_id="f2",
+            pid=6712,
+            process_name="rundll32.exe",
+            is_signed=False,
+            dst_ip="45.33.32.156",
+            dst_port=8443,
+            sni="cdn-azure-edge.net",
+            interval_str="15.0s",
+            sparkline="▅▆▆▅▆▆▅▆",
+            jitter_str="±1.1s",
+            jitter_pct="7.3%",
+            payload_str="1.2 KB",
+            threat_score=0.942,
+            threat_label="CRIT",
+            is_threat=True,
+            binary_path=r"C:\Windows\System32\rundll32.exe",
+            sig_info="Microsoft Windows (Proxy Exec)",
+            sha256="7c12bf9810ac9b32e144a10f8bc9910cde4279ab",
+            bursts="8 bursts / 2m",
+            user_context="CORP\\jdoe (Standard)",
+            is_severed=False,
+            mitre_technique="T1218.011 (Rundll32)",
+            state="ESTABLISHED",
+            packets=96,
+            bytes_transferred=24576,
+        ),
+        FlowEntry(
+            flow_id="f3",
+            pid=8830,
             process_name="powershell.exe",
             is_signed=False,
             dst_ip="185.220.101.5",
             dst_port=443,
-            sni="cdn-update-edge.azureedge.net",
-            interval_str="8.4s ±0.8s",
-            sparkline="▄ ▄ ▄ ▄ ▄ ▄",
-            payload_str="284 B",
-            threat_score=0.987,
-            threat_level="CRITICAL",
+            sni="api.telemetry-host.org",
+            interval_str="60.0s",
+            sparkline="▇▇▇▇▇▇▇▇",
+            jitter_str="±2.4s",
+            jitter_pct="4.0%",
+            payload_str="768 B",
+            threat_score=0.865,
+            threat_label="HIGH",
+            is_threat=True,
             binary_path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-            command_line="powershell.exe -ExecutionPolicy Bypass -NoP -Enc JABjAD0AbgBlAHc...",
-            parent_process="explorer.exe (4102)",
-            user_token="CORP\\jdoe",
-            is_elevated=False,
+            sig_info="Microsoft Windows",
+            sha256="99182abfc012781bcf4401a998bc41270ae19b88",
+            bursts="5 bursts / 5m",
+            user_context="CORP\\jdoe (Standard)",
+            is_severed=False,
+            mitre_technique="T1059.001 (PowerShell C2)",
             state="ESTABLISHED",
-            packets=182,
-            bytes_transferred=51688,
-            median_delta=8.42,
-            iqr_spread=0.28,
-            mad_jitter=0.14,
-            entropy=0.88,
+            packets=45,
+            bytes_transferred=14336,
         ),
         FlowEntry(
-            flow_id="f2",
+            flow_id="f4",
             pid=9216,
             process_name="chrome.exe",
             is_signed=True,
@@ -52,25 +108,107 @@ def get_demo_flows() -> list[FlowEntry]:
             dst_port=443,
             sni="*.1e100.net",
             interval_str="Irregular",
-            sparkline="█ ▄ ▇ ▂ █ ▄",
+            sparkline="█ ▄ ▇  ▅",
+            jitter_str="N/A",
+            jitter_pct="N/A",
             payload_str="3.8 KB",
             threat_score=0.002,
-            threat_level="SAFE",
+            threat_label="SAFE",
+            is_threat=False,
             binary_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            command_line="chrome.exe --type=utility --utility-sub-type=network.mojom.NetworkService",
-            parent_process="chrome.exe (3104)",
-            user_token="CORP\\jdoe",
-            is_elevated=False,
+            sig_info="Google LLC",
+            sha256="3b49f281e05a88c42b9100fae91845bb02",
+            bursts="Asynchronous",
+            user_context="CORP\\jdoe (Standard)",
+            is_severed=False,
+            mitre_technique="None (Benign Process)",
             state="ESTABLISHED",
             packets=4210,
             bytes_transferred=1602480,
-            median_delta=0.04,
-            iqr_spread=4.12,
-            mad_jitter=2.88,
-            entropy=4.25,
         ),
         FlowEntry(
-            flow_id="f3",
+            flow_id="f5",
+            pid=4118,
+            process_name="msedge.exe",
+            is_signed=True,
+            dst_ip="204.79.197.200",
+            dst_port=443,
+            sni="*.bing.com",
+            interval_str="Irregular",
+            sparkline="▂       ▂",
+            jitter_str="N/A",
+            jitter_pct="N/A",
+            payload_str="1.8 KB",
+            threat_score=0.001,
+            threat_label="SAFE",
+            is_threat=False,
+            binary_path=r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            sig_info="Microsoft Corp",
+            sha256="88f1c30291ba44c80112aa8944cc9921b7",
+            bursts="Asynchronous",
+            user_context="CORP\\jdoe (Standard)",
+            is_severed=False,
+            mitre_technique="None (Benign Process)",
+            state="ESTABLISHED",
+            packets=2104,
+            bytes_transferred=819200,
+        ),
+        FlowEntry(
+            flow_id="f6",
+            pid=6120,
+            process_name="svchost.exe",
+            is_signed=True,
+            dst_ip="20.189.173.1",
+            dst_port=443,
+            sni="*.azure.com",
+            interval_str="12.0s",
+            sparkline="▄ ▄ ▄ ▄",
+            jitter_str="±1.2s",
+            jitter_pct="10.0%",
+            payload_str="820 B",
+            threat_score=0.150,
+            threat_label="SAFE",
+            is_threat=False,
+            binary_path=r"C:\Windows\System32\svchost.exe",
+            sig_info="Microsoft Windows",
+            sha256="5a1098b10ef3341b8a99002477cbb14002",
+            bursts="6 bursts / 5m",
+            user_context="NT AUTHORITY\\SYSTEM",
+            is_severed=False,
+            mitre_technique="None (Benign Process)",
+            state="ESTABLISHED",
+            packets=84,
+            bytes_transferred=68880,
+        ),
+        FlowEntry(
+            flow_id="f7",
+            pid=7412,
+            process_name="outlook.exe",
+            is_signed=True,
+            dst_ip="13.107.42.16",
+            dst_port=443,
+            sni="outlook.office365.com",
+            interval_str="30.0s",
+            sparkline="▂ ▂ ▂ ▂",
+            jitter_str="±2.5s",
+            jitter_pct="8.3%",
+            payload_str="2.1 KB",
+            threat_score=0.080,
+            threat_label="SAFE",
+            is_threat=False,
+            binary_path=r"C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE",
+            sig_info="Microsoft Corp",
+            sha256="4410ef992a017cb210aa91288cc0041289",
+            bursts="4 bursts / 5m",
+            user_context="CORP\\jdoe (Standard)",
+            is_severed=False,
+            mitre_technique="None (Benign Process)",
+            state="ESTABLISHED",
+            packets=512,
+            bytes_transferred=1075200,
+        ),
+        FlowEntry(
+            flow_id="f8",
             pid=3488,
             process_name="spoolsv.exe",
             is_signed=True,
@@ -78,74 +216,23 @@ def get_demo_flows() -> list[FlowEntry]:
             dst_port=443,
             sni="print.corp.local",
             interval_str="Inactive",
-            sparkline="── ── ── ──",
+            sparkline="── ──",
+            jitter_str="N/A",
+            jitter_pct="N/A",
             payload_str="0 B",
             threat_score=0.000,
-            threat_level="SAFE",
+            threat_label="SAFE",
+            is_threat=False,
             binary_path=r"C:\Windows\System32\spoolsv.exe",
-            command_line="C:\\Windows\\System32\\spoolsv.exe",
-            parent_process="services.exe (688)",
-            user_token="NT AUTHORITY\\SYSTEM",
-            is_elevated=True,
+            sig_info="Microsoft Windows",
+            sha256="77b901a1c49988a01f44001b66ac0021b8",
+            bursts="None",
+            user_context="NT AUTHORITY\\SYSTEM",
+            is_severed=False,
+            mitre_technique="None (Benign Process)",
             state="ESTABLISHED",
             packets=12,
             bytes_transferred=840,
-            median_delta=120.0,
-            iqr_spread=15.2,
-            mad_jitter=12.0,
-            entropy=0.10,
-        ),
-        FlowEntry(
-            flow_id="f4",
-            pid=6120,
-            process_name="svchost.exe",
-            is_signed=True,
-            dst_ip="20.189.173.1",
-            dst_port=443,
-            sni="*.azure.com",
-            interval_str="12.0s ±1.2s",
-            sparkline="▄ ▄ ▄ ▄ ▄ ▄",
-            payload_str="820 B",
-            threat_score=0.150,
-            threat_level="LOW",
-            binary_path=r"C:\Windows\System32\svchost.exe",
-            command_line="svchost.exe -k netsvcs -p -s BITS",
-            parent_process="services.exe (688)",
-            user_token="NT AUTHORITY\\SYSTEM",
-            is_elevated=True,
-            state="ESTABLISHED",
-            packets=84,
-            bytes_transferred=68880,
-            median_delta=12.05,
-            iqr_spread=1.12,
-            mad_jitter=0.85,
-            entropy=1.20,
-        ),
-        FlowEntry(
-            flow_id="f5",
-            pid=7412,
-            process_name="outlook.exe",
-            is_signed=True,
-            dst_ip="13.107.42.16",
-            dst_port=443,
-            sni="outlook.office365.com",
-            interval_str="30.0s ±2.5s",
-            sparkline="▂ ▂ ▂ ▂ ▂ ▂",
-            payload_str="2.1 KB",
-            threat_score=0.080,
-            threat_level="SAFE",
-            binary_path=r"C:\Program Files\Microsoft Office\root\Office16\OUTLOOK.EXE",
-            command_line="OUTLOOK.EXE",
-            parent_process="explorer.exe (4102)",
-            user_token="CORP\\jdoe",
-            is_elevated=False,
-            state="ESTABLISHED",
-            packets=512,
-            bytes_transferred=1075200,
-            median_delta=30.02,
-            iqr_spread=2.45,
-            mad_jitter=1.80,
-            entropy=2.15,
         ),
     ]
 
@@ -211,11 +298,21 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     key_lower = key.lower()
                     if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
                         break
-                    elif key == "UP":
-                        state.selected_index = max(0, state.selected_index - 1)
+                    
+                    visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
+                    total_visible = len(visible_flows)
+                    v_size = 6 if state.drawer_expanded else 16
+
+                    if key == "UP":
+                        if state.selected_index > 0:
+                            state.selected_index -= 1
+                            if state.selected_index < state.viewport_start:
+                                state.viewport_start = state.selected_index
                     elif key == "DOWN":
-                        visible_count = len([f for f in state.flows if not state.filter_threats_only or f.threat_score >= 0.70])
-                        state.selected_index = min(visible_count - 1, state.selected_index + 1)
+                        if state.selected_index < total_visible - 1:
+                            state.selected_index += 1
+                            if state.selected_index >= state.viewport_start + v_size:
+                                state.viewport_start = state.selected_index - v_size + 1
                     elif key_lower in ("\r", "\n", "d"):  # Toggle drawer
                         state.drawer_expanded = not state.drawer_expanded
                     elif key == " ":  # Pause/Resume
@@ -223,15 +320,21 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     elif key_lower == "f":  # Filter threats only
                         state.filter_threats_only = not state.filter_threats_only
                         state.selected_index = 0
+                        state.viewport_start = 0
                     elif key_lower == "k":  # Kill socket simulation
-                        if state.flows:
-                            target = state.flows[state.selected_index]
-                            target.state = "TERMINATED (SetTcpEntry)"
-                            target.threat_score = 0.0
+                        if visible_flows and 0 <= state.selected_index < total_visible:
+                            target = visible_flows[state.selected_index]
+                            if target.is_threat:
+                                target.is_severed = True
+                                target.state = "SEVERED (Host Clean)"
+                                target.threat_score = 0.0
+                                target.threat_label = "SAFE"
+                                target.is_threat = False
+                                state.active_beacons = max(0, state.active_beacons - 1)
 
                 # Subtle simulated live packet ticks if not paused
                 if not state.is_paused and demo_mode:
-                    state.packet_rate = 140 + int(time.time() * 2) % 15
+                    state.packet_rate = 145 + int(time.time() * 2) % 12
 
                 live.update(build_cockpit_layout(state))
                 time.sleep(0.05)
@@ -239,7 +342,7 @@ def run_cockpit(demo_mode: bool = True) -> int:
     finally:
         kb.restore()
 
-    console.print("\n[bold cyan][*] Uncloak session ended cleanly.[/]")
+    console.print("\n[bold #10b981][*] Uncloak session ended cleanly.[/]")
     return 0
 
 
