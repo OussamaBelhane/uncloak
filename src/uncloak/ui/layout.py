@@ -423,13 +423,14 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
             # Interval & Cadence
             c_int = Text()
             if is_severed:
-                c_int.append("Inactive ", style="#64748b")
+                c_int.append(f"{'Inactive':<10}", style="#64748b")
                 c_int.append("(TCB Kill)", style="bold #38bdf8")
             else:
                 int_style = "bold #f59e0b" if is_threat else ("white" if is_selected else "#94a3b8")
-                c_int.append(f"{flow.interval_str} ", style=int_style)
-                spark_style = "bold #ef4444" if is_threat else "#10b981"
-                c_int.append(flow.sparkline, style=spark_style)
+                c_int.append(f"{flow.interval_str:<10}", style=int_style)
+                if flow.sparkline:
+                    spark_style = "bold #ef4444" if is_threat else ("#10b981" if "▎" in flow.sparkline else "#475569")
+                    c_int.append(flow.sparkline, style=spark_style)
 
             # Payload
             c_pay = Text(flow.payload_str, style="#64748b" if is_severed else ("white" if is_selected else "#94a3b8"))
@@ -584,13 +585,13 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     c2.append("• Pulse   : ", style="#64748b")
     if selected_flow.is_severed:
-        c2.append("── ── ── ", style="#64748b")
+        c2.append("──    ── ", style="#64748b")
         c2.append("(Severed)\n", style="#64748b")
     elif selected_flow.is_threat:
-        c2.append("█ · █ · █ ", style="bold #ef4444")
+        c2.append(f"{selected_flow.sparkline} ", style="bold #ef4444")
         c2.append("(Rigid)\n", style="#64748b")
     else:
-        c2.append(" ▂ ▃ ▅  ", style="#10b981")
+        c2.append(f"{selected_flow.sparkline} ", style="#10b981" if "▎" in selected_flow.sparkline else "#475569")
         c2.append("(Normal)\n", style="#64748b")
 
     c2.append("• Payload : ", style="#64748b")
