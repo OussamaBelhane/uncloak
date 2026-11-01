@@ -15,7 +15,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 from uncloak.ui.cockpit import FlowEntry, get_demo_flows, export_telemetry_json
 from uncloak.ui.layout import CockpitState
@@ -136,7 +136,6 @@ DATA_MANAGER = CockpitDataManager()
 class UncloakHTTPHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP API and UI asset server."""
     def log_message(self, format: str, *args: Any) -> None:
-        # Silence standard HTTP access logging to keep console clean
         pass
 
     def send_json(self, data: Any, status: int = 200) -> None:
@@ -214,43 +213,54 @@ def get_cockpit_html() -> str:
     --amber: #f59e0b;
     --crimson: #ef4444;
     --crimson-dark: #dc2626;
-    --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, 'SF Mono', monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+  /* Sleek Enterprise Dark Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #090e1c; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  * { scrollbar-width: thin; scrollbar-color: #334155 #090e1c; }
 
   body {
     background-color: var(--bg-main);
     color: var(--text-main);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 12px;
     height: 100vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding: 12px;
-    gap: 10px;
+    padding: 10px 14px;
+    gap: 8px;
     background-image: radial-gradient(circle at 50% 0%, rgba(15, 23, 42, 0.8), var(--bg-main) 70%);
   }
 
-  /* TOP HUD BAR */
+  /* TOP HUD BAR - STRICT SINGLE-LINE NO WRAP */
   .hud-bar {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 8px 16px;
+    padding: 6px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-height: 44px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    min-height: 48px;
   }
 
   .hud-left {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 8px;
+    flex-wrap: nowrap;
+    overflow: hidden;
   }
 
   .brand-badge {
@@ -258,14 +268,16 @@ def get_cockpit_html() -> str:
     align-items: center;
     gap: 8px;
     font-weight: 800;
-    font-size: 14px;
+    font-size: 13px;
     letter-spacing: 0.05em;
     color: var(--cyan);
+    white-space: nowrap;
+    margin-right: 4px;
   }
 
   .brand-badge svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     fill: var(--cyan);
     filter: drop-shadow(0 0 6px var(--cyan-glow));
   }
@@ -273,23 +285,24 @@ def get_cockpit_html() -> str:
   .pill {
     background: rgba(30, 41, 59, 0.6);
     border: 1px solid var(--border);
-    padding: 3px 8px;
+    padding: 4px 9px;
     border-radius: 4px;
     font-size: 11px;
     color: var(--text-muted);
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .pill strong { color: var(--text-main); }
   .pill.cyan { border-color: rgba(6, 182, 212, 0.4); color: var(--cyan); }
   .pill.emerald { border-color: rgba(16, 185, 129, 0.4); color: var(--emerald); }
-  .pill.crimson { border-color: rgba(239, 68, 68, 0.4); color: var(--crimson); }
 
   .live-pulse {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     background: var(--emerald);
     border-radius: 50%;
     box-shadow: 0 0 8px var(--emerald);
@@ -307,39 +320,46 @@ def get_cockpit_html() -> str:
     background: linear-gradient(90deg, rgba(30, 8, 8, 0.95), rgba(45, 12, 12, 0.85));
     border: 1px solid var(--crimson-dark);
     border-radius: 8px;
-    padding: 10px 16px;
+    padding: 8px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 0 25px rgba(220, 38, 38, 0.15);
+    gap: 12px;
+    box-shadow: 0 0 20px rgba(220, 38, 38, 0.15);
   }
 
   .incident-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
   }
 
   .incident-tag {
     background: var(--crimson-dark);
     color: white;
     font-weight: 700;
-    font-size: 11px;
+    font-size: 10px;
     padding: 3px 8px;
     border-radius: 4px;
     letter-spacing: 0.05em;
+    white-space: nowrap;
   }
 
   .incident-title {
     color: #fca5a5;
     font-weight: 700;
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .incident-details {
     color: var(--text-muted);
-    font-size: 12px;
-    margin-top: 2px;
+    font-size: 11px;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .incident-details span {
@@ -351,8 +371,8 @@ def get_cockpit_html() -> str:
     background: var(--crimson-dark);
     color: white;
     border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
+    border-radius: 5px;
+    padding: 5px 12px;
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 700;
@@ -361,7 +381,14 @@ def get_cockpit_html() -> str:
     display: flex;
     align-items: center;
     gap: 6px;
+    white-space: nowrap;
     box-shadow: 0 0 10px rgba(220, 38, 38, 0.4);
+  }
+
+  .btn-sever-quick svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
   }
 
   .btn-sever-quick:hover {
@@ -383,7 +410,7 @@ def get_cockpit_html() -> str:
   }
 
   .matrix-header-bar {
-    padding: 8px 16px;
+    padding: 6px 14px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -394,7 +421,7 @@ def get_cockpit_html() -> str:
   .matrix-title {
     color: var(--cyan);
     font-weight: 700;
-    font-size: 12px;
+    font-size: 11px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -410,12 +437,12 @@ def get_cockpit_html() -> str:
     background: #020617;
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 4px 10px;
+    padding: 3px 9px;
     color: var(--text-main);
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 11px;
     outline: none;
-    width: 220px;
+    width: 240px;
     transition: border-color 0.2s;
   }
 
@@ -432,7 +459,7 @@ def get_cockpit_html() -> str:
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
+    font-size: 11px;
     text-align: left;
   }
 
@@ -445,18 +472,19 @@ def get_cockpit_html() -> str:
   }
 
   th {
-    padding: 9px 12px;
+    padding: 7px 10px;
     color: var(--text-muted);
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 0.05em;
     cursor: pointer;
+    white-space: nowrap;
   }
 
   th:hover { color: var(--cyan); }
 
   tbody tr {
-    border-bottom: 1px solid rgba(30, 41, 59, 0.4);
+    border-bottom: 1px solid rgba(30, 41, 59, 0.3);
     cursor: pointer;
     transition: background-color 0.1s ease;
   }
@@ -464,7 +492,7 @@ def get_cockpit_html() -> str:
   tbody tr.row-normal { background: #090e1c; }
   tbody tr.row-threat { background: #1a0808; }
   tbody tr.row-threat:hover { background: #2d0c0c; }
-  tbody tr.row-severed { background: #090e1c; opacity: 0.65; }
+  tbody tr.row-severed { background: #090e1c; opacity: 0.6; }
 
   tbody tr.selected {
     background: #131e33 !important;
@@ -477,9 +505,44 @@ def get_cockpit_html() -> str:
   }
 
   td {
-    padding: 8px 12px;
+    padding: 6px 10px;
     white-space: nowrap;
     vertical-align: middle;
+  }
+
+  .sec-tag {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 5px;
+    display: inline-block;
+  }
+
+  .sec-tag.alert {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    color: var(--crimson);
+  }
+
+  .sec-tag.signed {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    color: var(--emerald);
+  }
+
+  .sni-raw {
+    color: var(--amber);
+    background: rgba(245, 158, 11, 0.1);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .pulse-svg {
+    vertical-align: middle;
+    display: inline-block;
   }
 
   .badge-crit {
@@ -487,8 +550,9 @@ def get_cockpit_html() -> str:
     color: white;
     font-weight: 700;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: 3px;
     font-size: 10px;
+    display: inline-block;
     box-shadow: 0 0 8px rgba(220, 38, 38, 0.5);
   }
 
@@ -497,8 +561,9 @@ def get_cockpit_html() -> str:
     color: white;
     font-weight: 700;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: 3px;
     font-size: 10px;
+    display: inline-block;
   }
 
   .badge-safe {
@@ -511,23 +576,9 @@ def get_cockpit_html() -> str:
     color: #38bdf8;
     border: 1px solid #38bdf8;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: 3px;
     font-size: 10px;
-  }
-
-  .pulse-canvas {
-    color: var(--crimson);
-    letter-spacing: 2px;
-    font-weight: 700;
-  }
-
-  .pulse-canvas.safe {
-    color: var(--emerald);
-  }
-
-  .pulse-canvas.asynch {
-    color: #64748b;
-    letter-spacing: 0;
+    display: inline-block;
   }
 
   /* FORENSIC TRI-PANE DRAWER */
@@ -537,10 +588,10 @@ def get_cockpit_html() -> str:
     border-radius: 8px;
     display: flex;
     flex-direction: column;
-    padding: 10px 14px;
-    gap: 10px;
+    padding: 8px 12px;
+    gap: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    min-height: 220px;
+    min-height: 200px;
   }
 
   .drawer-header {
@@ -548,45 +599,55 @@ def get_cockpit_html() -> str:
     align-items: center;
     justify-content: space-between;
     font-size: 11px;
-    color: var(--text-dim);
     border-bottom: 1px solid var(--border);
-    padding-bottom: 6px;
+    padding-bottom: 4px;
   }
 
   .drawer-title {
     color: var(--cyan);
     font-weight: 700;
-    font-size: 12px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .drawer-cards {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
+    gap: 10px;
+    align-items: stretch;
   }
 
   .forensic-card {
     background: var(--bg-card-inner);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 10px 14px;
+    padding: 8px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
+    justify-content: space-between;
   }
 
   .card-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.05em;
-    padding-bottom: 4px;
+    padding-bottom: 3px;
     border-bottom: 1px solid rgba(30, 41, 59, 0.5);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .card-title.cyan { color: #38bdf8; }
   .card-title.amber { color: var(--amber); }
   .card-title.blue { color: #06b6d4; }
+
+  .card-kv-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
 
   .card-row {
     display: flex;
@@ -606,6 +667,7 @@ def get_cockpit_html() -> str:
     text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .card-value.highlight-red { color: var(--crimson); font-weight: 700; }
@@ -617,7 +679,7 @@ def get_cockpit_html() -> str:
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-dim);
     padding: 0 4px;
   }
@@ -625,13 +687,13 @@ def get_cockpit_html() -> str:
   .key-badge {
     background: #1e293b;
     color: white;
-    padding: 1px 6px;
+    padding: 1px 5px;
     border-radius: 3px;
     font-weight: 700;
-    margin-right: 4px;
+    margin-right: 3px;
   }
 
-  /* DOSSIER MODAL OVERLAY */
+  /* MODAL */
   .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -649,12 +711,12 @@ def get_cockpit_html() -> str:
     background: #090e1c;
     border: 1px solid var(--cyan);
     border-radius: 8px;
-    width: 800px;
+    width: 780px;
     max-height: 85vh;
-    padding: 20px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     box-shadow: 0 0 35px var(--cyan-glow);
   }
 
@@ -663,16 +725,16 @@ def get_cockpit_html() -> str:
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 10px;
+    padding-bottom: 8px;
   }
 
-  .modal-header h3 { color: var(--cyan); font-size: 15px; }
+  .modal-header h3 { color: var(--cyan); font-size: 14px; }
 
   .btn-close {
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 18px;
+    font-size: 16px;
     cursor: pointer;
   }
 
@@ -680,11 +742,11 @@ def get_cockpit_html() -> str:
 
   .dossier-body {
     overflow-y: auto;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.6;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
 
   .action-btn {
@@ -692,11 +754,12 @@ def get_cockpit_html() -> str:
     color: white;
     border: 1px solid var(--border-highlight);
     border-radius: 4px;
-    padding: 5px 12px;
+    padding: 4px 10px;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
   }
 
   .action-btn:hover {
@@ -719,7 +782,7 @@ def get_cockpit_html() -> str:
     <div class="hud-left">
       <div class="brand-badge">
         <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-        UNCLOAK <span style="font-size: 11px; color: var(--text-dim); font-weight: normal;">v0.1.0</span>
+        UNCLOAK <span style="font-size: 10px; color: var(--text-dim); font-weight: normal;">v0.1.0</span>
       </div>
       <div class="pill cyan">HOST: <strong id="hud-host">WIN-PROD-SRV01 (X64)</strong></div>
       <div class="pill">BPF: <strong id="hud-bpf">tcp and (port 443 or 8443)</strong></div>
@@ -728,17 +791,17 @@ def get_cockpit_html() -> str:
       <div class="pill">CPU: <strong id="hud-cpu">0.8%</strong></div>
       <div class="pill">RAM: <strong id="hud-ram">7.5 MB</strong></div>
     </div>
-    <div class="hud-right" style="display: flex; align-items: center; gap: 10px;">
+    <div class="hud-right" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
       <div class="pill emerald"><div class="live-pulse"></div> ACTIVE</div>
       <div class="pill emerald" id="hud-siem">SIEM: EID 9002</div>
-      <button class="action-btn" onclick="exportTelemetry()">[E] Export JSON</button>
+      <button class="action-btn" onclick="exportTelemetry()">[E] Export Telemetry</button>
     </div>
   </header>
 
   <!-- PINNED CRITICAL INCIDENT BANNER -->
   <div class="incident-banner" id="incident-banner">
     <div class="incident-left">
-      <div class="incident-tag">[ TOP INCIDENT 1/3 ]</div>
+      <div class="incident-tag">[ CRITICAL INCIDENT 1/3 ]</div>
       <div>
         <div class="incident-title" id="inc-title">CRITICAL C2 BEACON ISOLATED</div>
         <div class="incident-details">
@@ -749,9 +812,11 @@ def get_cockpit_html() -> str:
         </div>
       </div>
     </div>
-    <div class="incident-right" style="display: flex; align-items: center; gap: 12px;">
-      <span style="font-size: 11px; color: var(--text-dim);">MITRE ATT&CK: <strong style="color: white;" id="inc-mitre">T1071.001</strong></span>
-      <button class="btn-sever-quick" id="btn-quick-sever" onclick="severCurrentIncident()">⚡ Sever Connection</button>
+    <div class="incident-right" style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
+      <span style="font-size: 10px; color: var(--text-dim);">MITRE ATT&CK: <strong style="color: white;" id="inc-mitre">T1071.001</strong></span>
+      <button class="btn-sever-quick" id="btn-quick-sever" onclick="severCurrentIncident()">
+        <svg viewBox="0 0 16 16"><path d="M7 1v6H3l6 8V9h4L7 1z"/></svg> Sever Connection
+      </button>
     </div>
   </div>
 
@@ -760,7 +825,7 @@ def get_cockpit_html() -> str:
     <div class="matrix-header-bar">
       <div class="matrix-title">
         <span>ACTIVE FLOWS (<span id="total-flows-badge">124</span>)</span>
-        <span class="pill" style="font-size: 10px;">Kernel Telemetry Ingest</span>
+        <span class="pill" style="font-size: 9px; padding: 2px 6px;">Live Kernel Telemetry Ingestion</span>
       </div>
       <div class="matrix-search">
         <input type="text" class="search-input" id="search-input" placeholder="Search PID, Process, IP... [/]" oninput="handleSearch(this.value)">
@@ -774,14 +839,13 @@ def get_cockpit_html() -> str:
             <th onclick="sortTable('process_name')">PROCESS</th>
             <th onclick="sortTable('dst_ip')">DESTINATION</th>
             <th>SNI / DOMAIN</th>
-            <th onclick="sortTable('interval_str')">INTERVAL & PULSE</th>
+            <th onclick="sortTable('interval_str')">INTERVAL & LOGIC PULSE</th>
             <th onclick="sortTable('payload_str')">PAYLOAD</th>
             <th onclick="sortTable('threat_score')" style="text-align: right;">THREAT SCORE ▼</th>
             <th style="text-align: center;">ACTION</th>
           </tr>
         </thead>
         <tbody id="flows-tbody">
-          <!-- Dynamically populated rows -->
         </tbody>
       </table>
     </div>
@@ -790,44 +854,57 @@ def get_cockpit_html() -> str:
   <!-- FORENSIC ATTRIBUTION TRI-PANE DRAWER -->
   <section class="drawer-container" id="drawer-panel">
     <div class="drawer-header">
-      <div class="drawer-title" id="drawer-title">── FORENSIC ATTRIBUTION : 193.26.158.114:443 (PID 5824) ──</div>
+      <div class="drawer-title" id="drawer-title">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="var(--cyan)"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        FORENSIC SESSION ATTRIBUTION : 193.26.158.114:443 (PID 5824)
+      </div>
       <div>
-        <button class="action-btn" onclick="openDossierModal()">[I] Open Full Dossier</button>
+        <button class="action-btn" onclick="openDossierModal()">[I] Open Forensic Dossier</button>
       </div>
     </div>
     <div class="drawer-cards">
       <!-- Card 1: Host Attribution -->
       <div class="forensic-card">
         <div class="card-title cyan">[ HOST ATTRIBUTION ]</div>
-        <div class="card-row"><span class="card-label">• PID :</span><span class="card-value" id="c1-pid">5824</span></div>
-        <div class="card-row"><span class="card-label">• Process :</span><span class="card-value highlight-red" id="c1-proc">update.exe</span></div>
-        <div class="card-row"><span class="card-label">• Path :</span><span class="card-value" id="c1-path">AppData\Roaming\update.exe</span></div>
-        <div class="card-row"><span class="card-label">• Signature :</span><span class="card-value highlight-red" id="c1-sig">Unsigned PE (In-Memory Hollowed)</span></div>
-        <div class="card-row"><span class="card-label">• SHA256 :</span><span class="card-value" id="c1-sha">e3b0c44298fc1c..</span></div>
-        <div class="card-row"><span class="card-label">• Parent :</span><span class="card-value" id="c1-parent">cmd.exe (PID 4920) -> explorer.exe</span></div>
+        <div class="card-kv-grid">
+          <div class="card-row"><span class="card-label">PID</span><span class="card-value" id="c1-pid">5824</span></div>
+          <div class="card-row"><span class="card-label">Process</span><span class="card-value highlight-red" id="c1-proc">update.exe</span></div>
+          <div class="card-row"><span class="card-label">Binary Path</span><span class="card-value" id="c1-path">AppData\Roaming\update.exe</span></div>
+          <div class="card-row"><span class="card-label">Signature</span><span class="card-value highlight-red" id="c1-sig">Unsigned PE (In-Memory Hollowed)</span></div>
+          <div class="card-row"><span class="card-label">SHA-256</span><span class="card-value" id="c1-sha">e3b0c44298fc1c..</span></div>
+          <div class="card-row"><span class="card-label">Parent Lineage</span><span class="card-value" id="c1-parent">cmd.exe (4920) -> explorer.exe</span></div>
+        </div>
+        <div style="height: 28px;"></div>
       </div>
 
       <!-- Card 2: Cadence & Timing -->
       <div class="forensic-card">
         <div class="card-title amber">[ CADENCE & TIMING ]</div>
-        <div class="card-row"><span class="card-label">• Interval :</span><span class="card-value" id="c2-int">8.4s (±0.8s)</span></div>
-        <div class="card-row"><span class="card-label">• State :</span><span class="card-value highlight-red" id="c2-state">ACTIVE (C2 Live)</span></div>
-        <div class="card-row"><span class="card-label">• Pulse :</span><span class="card-value pulse-canvas" id="c2-pulse">▄ ▄ ▄ ▄ (Rigid)</span></div>
-        <div class="card-row"><span class="card-label">• Payload :</span><span class="card-value" id="c2-payload">512 B (Fixed)</span></div>
-        <div class="card-row"><span class="card-label">• Bursts :</span><span class="card-value" id="c2-bursts">14 bursts / 2m</span></div>
-        <div class="card-row"><span class="card-label">• Jitter :</span><span class="card-value highlight-red" id="c2-jitter">9.5% (Anomalous)</span></div>
+        <div class="card-kv-grid">
+          <div class="card-row"><span class="card-label">Interval</span><span class="card-value" id="c2-int">8.4s (±0.8s)</span></div>
+          <div class="card-row"><span class="card-label">Beacon State</span><span class="card-value highlight-red" id="c2-state">ACTIVE (C2 Live)</span></div>
+          <div class="card-row"><span class="card-label">Logic Wave</span><span class="card-value" id="c2-pulse"></span></div>
+          <div class="card-row"><span class="card-label">Payload Profile</span><span class="card-value" id="c2-payload">512 B (Fixed)</span></div>
+          <div class="card-row"><span class="card-label">Burst Distribution</span><span class="card-value" id="c2-bursts">14 bursts / 2m</span></div>
+          <div class="card-row"><span class="card-label">Jitter Metric</span><span class="card-value highlight-red" id="c2-jitter">9.5% (Rigid / Anomalous)</span></div>
+        </div>
+        <div style="height: 28px;"></div>
       </div>
 
       <!-- Card 3: Forensic & Mitigation -->
       <div class="forensic-card">
         <div class="card-title blue">[ FORENSIC & MITIGATION ]</div>
-        <div class="card-row"><span class="card-label">• MITRE :</span><span class="card-value" id="c3-mitre">T1071.001 (Web Protocols)</span></div>
-        <div class="card-row"><span class="card-label">• Kernel :</span><span class="card-value highlight-cyan">SetTcpEntry (Win32)</span></div>
-        <div class="card-row"><span class="card-label">• Action :</span><span class="card-value" id="c3-action">Pending Mitigation</span></div>
-        <div class="card-row"><span class="card-label">• Stack :</span><span class="card-value" id="c3-stack">ESTABLISHED (Live)</span></div>
-        <div class="card-row"><span class="card-label">• Audit :</span><span class="card-value">Sysmon EID 3 │ Defender 9001</span></div>
-        <div style="margin-top: 4px;">
-          <button class="btn-sever-quick" style="width: 100%; justify-content: center;" id="btn-card-sever" onclick="severSelectedFlow()">⚡ Sever Socket (SetTcpEntry)</button>
+        <div class="card-kv-grid">
+          <div class="card-row"><span class="card-label">MITRE ATT&CK</span><span class="card-value" id="c3-mitre">T1071.001 (Web Protocols)</span></div>
+          <div class="card-row"><span class="card-label">Kernel Hook API</span><span class="card-value highlight-cyan">iphlpapi.dll SetTcpEntry</span></div>
+          <div class="card-row"><span class="card-label">Action Status</span><span class="card-value" id="c3-action">Pending Mitigation</span></div>
+          <div class="card-row"><span class="card-label">Socket State</span><span class="card-value" id="c3-stack">ESTABLISHED (Live)</span></div>
+          <div class="card-row"><span class="card-label">Audit Log</span><span class="card-value">Sysmon EID 3 │ Defender 9001</span></div>
+        </div>
+        <div>
+          <button class="btn-sever-quick" style="width: 100%; justify-content: center;" id="btn-card-sever" onclick="severSelectedFlow()">
+            <svg viewBox="0 0 16 16"><path d="M7 1v6H3l6 8V9h4L7 1z"/></svg> Sever Socket via SetTcpEntry
+          </button>
         </div>
       </div>
     </div>
@@ -838,11 +915,11 @@ def get_cockpit_html() -> str:
     <div>
       <span class="key-badge">↑/↓</span> Navigate
       <span class="key-badge">K</span> Sever Socket
-      <span class="key-badge">I</span> Dossier
+      <span class="key-badge">I</span> Full Dossier
       <span class="key-badge">/</span> Search
-      <span class="key-badge">E</span> Export
+      <span class="key-badge">E</span> Export Telemetry
     </div>
-    <div style="color: var(--cyan);">UNCLOAK Autonomous Threat Telemetry Engine</div>
+    <div style="color: var(--text-dim);">UNCLOAK v0.1.0 │ Autonomous C2 Stealth Beacon Hunter</div>
   </footer>
 
   <!-- FULL FORENSIC DOSSIER MODAL -->
@@ -853,11 +930,10 @@ def get_cockpit_html() -> str:
         <button class="btn-close" onclick="closeDossierModal()">✕</button>
       </div>
       <div class="dossier-body" id="modal-dossier-body">
-        <!-- Content populated dynamically -->
       </div>
-      <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 12px;">
+      <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
         <button class="action-btn" onclick="exportDossierSelected()">Export Dossier JSON</button>
-        <button class="action-btn danger" onclick="severSelectedFlow(); closeDossierModal();">⚡ Sever Connection</button>
+        <button class="action-btn danger" onclick="severSelectedFlow(); closeDossierModal();">Sever Connection</button>
         <button class="action-btn" onclick="closeDossierModal()">Close</button>
       </div>
     </div>
@@ -877,6 +953,36 @@ def get_cockpit_html() -> str:
       renderUI();
     } catch (e) {
       console.error('Telemetry fetch failed:', e);
+    }
+  }
+
+  function renderWaveSvg(sparkline, isThreat, isSevered) {
+    if (isSevered) {
+      return `<svg width="74" height="14" viewBox="0 0 74 14" class="pulse-svg">
+        <line x1="0" y1="7" x2="74" y2="7" stroke="#475569" stroke-width="1.5" stroke-dasharray="4 4" />
+      </svg>`;
+    }
+    if (!isThreat || sparkline.includes('──')) {
+      return `<svg width="74" height="14" viewBox="0 0 74 14" class="pulse-svg">
+        <line x1="0" y1="10" x2="74" y2="10" stroke="#10b981" stroke-width="1.5" stroke-dasharray="6 3" />
+      </svg>`;
+    }
+    const color = isThreat ? "#ef4444" : "#10b981";
+    if (sparkline.includes('▄ ▄ ▄ ▄')) {
+      return `<svg width="74" height="14" viewBox="0 0 74 14" class="pulse-svg">
+        <path d="M0,11 L6,11 L6,2 L14,2 L14,11 L24,11 L24,2 L32,2 L32,11 L42,11 L42,2 L50,2 L50,11 L60,11 L60,2 L68,2 L68,11 L74,11" 
+              fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>`;
+    } else if (sparkline.includes('▄   ▄   ▄')) {
+      return `<svg width="74" height="14" viewBox="0 0 74 14" class="pulse-svg">
+        <path d="M0,11 L10,11 L10,2 L18,2 L18,11 L34,11 L34,2 L42,2 L42,11 L58,11 L58,2 L66,2 L66,11 L74,11" 
+              fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>`;
+    } else {
+      return `<svg width="74" height="14" viewBox="0 0 74 14" class="pulse-svg">
+        <path d="M0,11 L14,11 L14,2 L24,2 L24,11 L52,11 L52,2 L62,2 L62,11 L74,11" 
+              fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>`;
     }
   }
 
@@ -904,12 +1010,12 @@ def get_cockpit_html() -> str:
       document.getElementById('inc-mitre').innerText = inc.mitre;
       const btn = document.getElementById('btn-quick-sever');
       if (inc.is_severed) {
-        btn.innerText = '✓ Severed';
+        btn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.485 1.431a.75.75 0 0 1 .284 1.022l-7 12a.75.75 0 0 1-1.258.064l-4.5-6a.75.75 0 1 1 1.2-1.234l3.834 5.111 6.418-11.004a.75.75 0 0 1 1.022-.284z"/></svg> Severed';
         btn.style.background = '#1e293b';
         btn.style.boxShadow = 'none';
         btn.disabled = true;
       } else {
-        btn.innerText = '⚡ Sever Connection';
+        btn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M7 1v6H3l6 8V9h4L7 1z"/></svg> Sever Connection';
         btn.style.background = 'var(--crimson-dark)';
         btn.disabled = false;
       }
@@ -950,10 +1056,6 @@ def get_cockpit_html() -> str:
       if (isSelected) rowClass += ' selected';
       tr.className = rowClass;
 
-      // Pulse sparkline class
-      let pulseClass = 'pulse-canvas';
-      if (flow.is_severed || !flow.is_threat) pulseClass += (flow.sparkline.includes('──') ? ' asynch' : ' safe');
-
       // Threat Badge
       let threatBadge = '';
       if (flow.is_severed) {
@@ -967,21 +1069,24 @@ def get_cockpit_html() -> str:
       }
 
       // Security tag on process
-      let secTag = flow.is_signed ? '<span style="color: var(--emerald);">✓</span>' : '<span style="color: var(--crimson);">!</span>';
+      let secTag = flow.is_signed ? '<span class="sec-tag signed">SIGNED</span>' : '<span class="sec-tag alert">UNSIGNED</span>';
+
+      // Real SVG logic analyzer waveform
+      const waveHtml = renderWaveSvg(flow.sparkline, flow.is_threat, flow.is_severed);
 
       tr.innerHTML = `
         <td style="font-weight: 700; color: ${flow.is_threat && !flow.is_severed ? 'var(--crimson)' : 'var(--text-main)'};">${flow.pid}</td>
         <td><strong style="color: ${flow.is_threat && !flow.is_severed ? 'var(--crimson)' : 'white'};">${flow.process_name}</strong> ${secTag}</td>
         <td>${flow.dst_ip}:${flow.dst_port}</td>
-        <td style="color: ${flow.sni ? 'var(--text-muted)' : 'var(--amber)'};">${flow.sni || '[Raw IP / No SNI]'}</td>
+        <td>${flow.sni ? `<span style="color: var(--text-muted);">${flow.sni}</span>` : '<span class="sni-raw">RAW IP / NO SNI</span>'}</td>
         <td>
           <span style="font-weight: 700; margin-right: 8px;">${flow.interval_str}</span>
-          <span class="${pulseClass}">${flow.is_severed ? '──    ──' : flow.sparkline}</span>
+          ${waveHtml}
         </td>
         <td>${flow.payload_str}</td>
         <td style="text-align: right;">${threatBadge}</td>
         <td style="text-align: center;">
-          ${flow.is_threat && !flow.is_severed ? `<button class="action-btn danger" style="padding: 2px 8px; font-size: 10px;" onclick="event.stopPropagation(); severFlow(${flow.pid});">Sever</button>` : ''}
+          ${flow.is_threat && !flow.is_severed ? `<button class="action-btn danger" style="padding: 2px 7px; font-size: 10px;" onclick="event.stopPropagation(); severFlow(${flow.pid});">Sever</button>` : ''}
         </td>
       `;
 
@@ -1008,7 +1113,10 @@ def get_cockpit_html() -> str:
     const flow = stateData.flows.find(f => f.pid === selectedPid) || stateData.flows[0];
     if (!flow) return;
 
-    document.getElementById('drawer-title').innerText = `── FORENSIC ATTRIBUTION : ${flow.dst_ip}:${flow.dst_port} (PID ${flow.pid}) ──`;
+    document.getElementById('drawer-title').innerHTML = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="var(--cyan)"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      FORENSIC SESSION ATTRIBUTION : ${flow.dst_ip}:${flow.dst_port} (PID ${flow.pid})
+    `;
     
     // Card 1
     document.getElementById('c1-pid').innerText = flow.pid;
@@ -1024,10 +1132,10 @@ def get_cockpit_html() -> str:
     document.getElementById('c2-int').innerText = `${flow.interval_str} (${flow.jitter_str})`;
     document.getElementById('c2-state').innerText = flow.is_severed ? 'SEVERED (Host Clean)' : (flow.is_threat ? 'ACTIVE (C2 Live)' : 'RANDOM (Human)');
     document.getElementById('c2-state').className = flow.is_severed ? 'card-value' : (flow.is_threat ? 'card-value highlight-red' : 'card-value highlight-green');
-    document.getElementById('c2-pulse').innerText = flow.is_severed ? '──    ── (Severed)' : `${flow.sparkline} ${flow.is_threat ? '(Rigid)' : '(Normal)'}`;
+    document.getElementById('c2-pulse').innerHTML = renderWaveSvg(flow.sparkline, flow.is_threat, flow.is_severed);
     document.getElementById('c2-payload').innerText = `${flow.payload_str} ${flow.is_threat && !flow.is_severed ? '(Fixed)' : '(Dynamic)'}`;
     document.getElementById('c2-bursts').innerText = flow.bursts || '0 (Severed)';
-    document.getElementById('c2-jitter').innerText = `${flow.jitter_pct} ${flow.is_threat ? '(Anomalous)' : '(Normal)'}`;
+    document.getElementById('c2-jitter').innerText = `${flow.jitter_pct} ${flow.is_threat ? '(Rigid / Anomalous)' : '(Normal)'}`;
 
     // Card 3
     document.getElementById('c3-mitre').innerText = flow.mitre_technique || 'N/A';
@@ -1036,11 +1144,11 @@ def get_cockpit_html() -> str:
     
     const cardSeverBtn = document.getElementById('btn-card-sever');
     if (flow.is_severed) {
-      cardSeverBtn.innerText = '✓ Connection Severed';
+      cardSeverBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.485 1.431a.75.75 0 0 1 .284 1.022l-7 12a.75.75 0 0 1-1.258.064l-4.5-6a.75.75 0 1 1 1.2-1.234l3.834 5.111 6.418-11.004a.75.75 0 0 1 1.022-.284z"/></svg> Connection Severed';
       cardSeverBtn.style.background = '#1e293b';
       cardSeverBtn.disabled = true;
     } else {
-      cardSeverBtn.innerText = '⚡ Sever Socket (SetTcpEntry)';
+      cardSeverBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M7 1v6H3l6 8V9h4L7 1z"/></svg> Sever Socket via SetTcpEntry';
       cardSeverBtn.style.background = 'var(--crimson-dark)';
       cardSeverBtn.disabled = false;
     }
@@ -1101,8 +1209,8 @@ def get_cockpit_html() -> str:
     document.getElementById('modal-dossier-title').innerText = `PROCESS FORENSIC DOSSIER : ${flow.process_name} (PID ${flow.pid})`;
     const body = document.getElementById('modal-dossier-body');
     body.innerHTML = `
-      <div style="background: #020617; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
-        <h4 style="color: var(--cyan); margin-bottom: 8px;">[ BINARY FORENSICS & ATTRIBUTION ]</h4>
+      <div style="background: #020617; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border);">
+        <h4 style="color: var(--cyan); margin-bottom: 6px;">[ BINARY FORENSICS & ATTRIBUTION ]</h4>
         <p>• <strong>Binary Path:</strong> ${flow.binary_path}</p>
         <p>• <strong>Command Line:</strong> <code style="color: #cbd5e1;">${flow.command_line}</code></p>
         <p>• <strong>Parent Lineage:</strong> ${flow.parent_process}</p>
@@ -1110,8 +1218,8 @@ def get_cockpit_html() -> str:
         <p>• <strong>SHA-256 Hash:</strong> <code style="color: var(--cyan); word-break: break-all;">${flow.sha256}</code></p>
       </div>
 
-      <div style="background: #020617; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
-        <h4 style="color: var(--amber); margin-bottom: 8px;">[ C2 DETECTION HEURISTICS & JA4 ]</h4>
+      <div style="background: #020617; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border);">
+        <h4 style="color: var(--amber); margin-bottom: 6px;">[ C2 DETECTION HEURISTICS & JA4 ]</h4>
         <p>• <strong>C2 Framework:</strong> ${flow.c2_framework || 'Benign / Unclassified'}</p>
         <p>• <strong>JA4 Fingerprint:</strong> <code style="color: var(--amber);">${flow.ja4_fingerprint || 'N/A'}</code></p>
         <p>• <strong>Detection Reasons:</strong> ${flow.detection_reasons}</p>
@@ -1119,8 +1227,8 @@ def get_cockpit_html() -> str:
         <p>• <strong>Threat Score:</strong> ${(flow.threat_score * 100).toFixed(1)}% (${flow.threat_label})</p>
       </div>
 
-      <div style="background: #020617; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
-        <h4 style="color: #38bdf8; margin-bottom: 8px;">[ ACTIVE NETWORK SOCKET TELEMETRY ]</h4>
+      <div style="background: #020617; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border);">
+        <h4 style="color: #38bdf8; margin-bottom: 6px;">[ ACTIVE NETWORK SOCKET TELEMETRY ]</h4>
         <p>• <strong>Socket Tuple:</strong> ${flow.src_ip}:${flow.src_port} -> ${flow.dst_ip}:${flow.dst_port}</p>
         <p>• <strong>TLS SNI Hostname:</strong> ${flow.sni || '[Raw IP / No SNI Extracted]'}</p>
         <p>• <strong>Cadence Pattern:</strong> Interval ${flow.interval_str} │ Jitter ${flow.jitter_pct} │ Payload ${flow.payload_str}</p>
@@ -1149,7 +1257,6 @@ def get_cockpit_html() -> str:
     renderUI();
   }
 
-  // Keyboard navigation
   window.addEventListener('keydown', (e) => {
     if (e.key === '/') {
       e.preventDefault();
@@ -1175,7 +1282,6 @@ def get_cockpit_html() -> str:
     }
   });
 
-  // Poll state every 1.0 second
   setInterval(fetchState, 1000);
   fetchState();
 </script>
@@ -1186,7 +1292,6 @@ def get_cockpit_html() -> str:
 
 def launch_desktop(port: Optional[int] = None) -> int:
     """Launches the enterprise desktop cockpit using WebView2 with zero-dependency loopback fallback."""
-    # 1. Start local ephemeral HTTP server
     server = HTTPServer(("127.0.0.1", port or 0), UncloakHTTPHandler)
     assigned_port = server.server_address[1]
     url = f"http://127.0.0.1:{assigned_port}"
@@ -1196,7 +1301,6 @@ def launch_desktop(port: Optional[int] = None) -> int:
 
     print(f"[*] Uncloak Enterprise Desktop Engine initialized on {url}")
 
-    # 2. Try native pywebview first if available
     try:
         import webview
         print("[*] Launching native Microsoft Edge WebView2 window via pywebview...")
@@ -1214,8 +1318,6 @@ def launch_desktop(port: Optional[int] = None) -> int:
     except ImportError:
         pass
 
-    # 3. Native OS Application Mode Fallback (Zero external pip packages needed!)
-    # On Windows: msedge.exe --app=URL launches a frameless, clean standalone desktop window!
     system = platform.system()
     app_launched = False
 
@@ -1249,7 +1351,6 @@ def launch_desktop(port: Optional[int] = None) -> int:
                 pass
 
     elif system == "Linux":
-        # Check for chromium/chrome --app mode or xdg-open
         for browser in ("google-chrome", "chromium-browser", "chromium", "brave-browser", "edge"):
             try:
                 proc = subprocess.Popen([browser, f"--app={url}", "--window-size=1420,870"])
