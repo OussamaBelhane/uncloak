@@ -253,7 +253,7 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
 
     sh.add_row(sh_left, sh_right)
 
-    # 7-Column Table
+    # 7-Column Table - Proportional responsive column spacing strictly matching reference
     table = Table(
         box=None,
         expand=True,
@@ -261,13 +261,30 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
         show_header=True,
         header_style="bold #94a3b8 on #090e1c",
     )
-    table.add_column("PID", width=8, no_wrap=True)
-    table.add_column("PROCESS", width=18, no_wrap=True)
-    table.add_column("DESTINATION", width=22, no_wrap=True)
-    table.add_column("SNI / DOMAIN", width=25, no_wrap=True)
-    table.add_column("INTERVAL", width=19, no_wrap=True)
-    table.add_column("PAYLOAD", width=9, justify="right", no_wrap=True)
-    table.add_column("THREAT ▼", width=15, justify="right", no_wrap=True)
+    if width >= 150:
+        table.add_column("PID", width=10, no_wrap=True)
+        table.add_column("PROCESS", width=24, no_wrap=True)
+        table.add_column("DESTINATION", width=28, no_wrap=True)
+        table.add_column("SNI / DOMAIN", width=34, no_wrap=True)
+        table.add_column("INTERVAL", width=26, no_wrap=True)
+        table.add_column("PAYLOAD", width=12, justify="right", no_wrap=True)
+        table.add_column("THREAT ▼", width=16, justify="right", no_wrap=True)
+    elif width >= 135:
+        table.add_column("PID", width=9, no_wrap=True)
+        table.add_column("PROCESS", width=21, no_wrap=True)
+        table.add_column("DESTINATION", width=25, no_wrap=True)
+        table.add_column("SNI / DOMAIN", width=30, no_wrap=True)
+        table.add_column("INTERVAL", width=24, no_wrap=True)
+        table.add_column("PAYLOAD", width=11, justify="right", no_wrap=True)
+        table.add_column("THREAT ▼", width=15, justify="right", no_wrap=True)
+    else:
+        table.add_column("PID", width=8, no_wrap=True)
+        table.add_column("PROCESS", width=18, no_wrap=True)
+        table.add_column("DESTINATION", width=22, no_wrap=True)
+        table.add_column("SNI / DOMAIN", width=25, no_wrap=True)
+        table.add_column("INTERVAL", width=19, no_wrap=True)
+        table.add_column("PAYLOAD", width=9, justify="right", no_wrap=True)
+        table.add_column("THREAT ▼", width=15, justify="right", no_wrap=True)
 
     if not slice_flows:
         table.add_row("", "", "No active network sessions matching criteria", "", "", "", "")
@@ -363,7 +380,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     dt.add_row(dt_left, dt_right)
 
-    # Card 1: Host Attribution (Cyan title [ HOST ATTRIBUTION ] in reference)
+    # Card 1: Host Attribution (Green title [ HOST ATTRIBUTION ] in reference)
     c1 = Text()
     c1.append("• PID       : ", style="#64748b")
     c1.append(f"{selected_flow.pid}\n", style="bold white")
@@ -386,7 +403,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     p1 = Panel(
         c1,
-        title="[bold #06b6d4][ HOST ATTRIBUTION ][/]",
+        title="[bold #10b981][ HOST ATTRIBUTION ][/]",
         box=box.ROUNDED,
         style="on #060913",
         border_style="#1e293b",
@@ -427,16 +444,18 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     # Card 3: Forensic & MITRE (Cyan title [ FORENSIC & MITRE ] in reference)
     c3 = Text()
-    c3.append("• MITRE : ", style="#64748b")
+    c3.append("• MITRE   : ", style="#64748b")
     c3.append(f"{selected_flow.mitre_technique}\n", style="bold white")
-    c3.append("• API   : ", style="#64748b")
+    c3.append("• API     : ", style="#64748b")
     c3.append("SetTcpEntry\n", style="bold #06b6d4")
-    c3.append("• Action: ", style="#64748b")
+    c3.append("• Action  : ", style="#64748b")
     c3.append("TCP RST Injected Stack\n", style="bold #10b981")
-    c3.append("• State : ", style="#64748b")
+    c3.append("• State   : ", style="#64748b")
     c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
-    c3.append("• Audit : ", style="#64748b")
-    c3.append("SQLite #142  EID 9002\n", style="#cbd5e1")
+    c3.append("• Audit   : ", style="#64748b")
+    c3.append("SQLite #142 ", style="#cbd5e1")
+    c3.append("│ ", style="#334155")
+    c3.append("EID 9002\n", style="#cbd5e1")
     c3.append(" ", style="dim")
 
     p3 = Panel(
@@ -464,6 +483,12 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
 def render_footer(state: CockpitState) -> RenderableType:
     """Renders the pristine UNIX hotkey guide strictly matching reference (flat bar, NO panel border)."""
+    grid = Table.grid(expand=True)
+    grid.add_column()
+    
+    # 1 blank line for vertical breathing room matching reference
+    grid.add_row("")
+
     footer_grid = Table.grid(expand=True)
     footer_grid.add_column(ratio=6)
     footer_grid.add_column(ratio=1, justify="right")
@@ -494,7 +519,8 @@ def render_footer(state: CockpitState) -> RenderableType:
     fr.append("Quit", style="#94a3b8")
 
     footer_grid.add_row(fl, fr)
-    return footer_grid
+    grid.add_row(footer_grid)
+    return grid
 
 
 def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional[int] = None) -> Layout:
@@ -507,16 +533,16 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
     header_size = 3
     alert_size = 4 if pinned_alert else 0
     drawer_size = 9 if state.drawer_expanded else 0
-    footer_size = 1
+    footer_size = 2
 
     # Exact line budget matching reference:
     # Header: 3
     # Alert: 4
     # Table: 10 (1 border + 1 sub_header + 1 col header + 6 data rows + 1 border)
     # Drawer: 9 (1 title row + 8 cards)
-    # Footer: 1 (flat keycap bar)
-    # Total = 27 lines!
-    term_height = height if (height and height >= 20) else 27
+    # Footer: 2 (1 blank line + 1 flat keycap bar)
+    # Total = 28 lines!
+    term_height = height if (height and height >= 20) else 28
     fixed_overhead = header_size + alert_size + drawer_size + footer_size
     avail = term_height - fixed_overhead
 

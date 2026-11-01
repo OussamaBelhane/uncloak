@@ -308,10 +308,10 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     header_size = 3
                     alert_size = 4 if has_alert else 0
                     drawer_size = 9 if state.drawer_expanded else 0
-                    footer_size = 1
+                    footer_size = 2
                     fixed_overhead = header_size + alert_size + drawer_size + footer_size
 
-                    term_h = console.height if (console.height and console.height >= 20) else 27
+                    term_h = console.height if (console.height and console.height >= 20) else 28
                     table_size = max(6, term_h - fixed_overhead)
                     v_size = max(2, table_size - 4)
 
