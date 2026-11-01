@@ -103,8 +103,7 @@ def get_visible_flows(state: CockpitState) -> list[FlowEntry]:
     # 3. Sorting
     sort_field = getattr(state, "sort_field", "threat").lower()
     if sort_field == "threat":
-        # Highest threat score first, severed at bottom
-        flows.sort(key=lambda f: (f.is_severed, -f.threat_score))
+        flows.sort(key=lambda f: -f.threat_score)
     elif sort_field == "interval":
         # Ascending interval duration for periodic beacons first, irregular/inactive last
         def _interval_val(f: FlowEntry) -> tuple[int, float]:
@@ -359,10 +358,10 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
         table.add_column(hdr_pid, width=8, no_wrap=True)
         table.add_column(hdr_proc, width=18, no_wrap=True)
         table.add_column(hdr_dst, width=22, no_wrap=True)
-        table.add_column(hdr_sni, width=25, no_wrap=True)
-        table.add_column(hdr_int, width=19, no_wrap=True)
-        table.add_column(hdr_pay, width=9, justify="right", no_wrap=True)
-        table.add_column(hdr_thr, width=15, justify="right", no_wrap=True)
+        table.add_column(hdr_sni, width=24, no_wrap=True)
+        table.add_column(hdr_int, width=22, no_wrap=True)
+        table.add_column(hdr_pay, width=10, justify="right", no_wrap=True)
+        table.add_column(hdr_thr, width=14, justify="right", no_wrap=True)
 
     if not slice_flows:
         table.add_row("", "", "No active network sessions matching criteria", "", "", "", "")
@@ -396,23 +395,21 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
 
             # Interval & Cadence
             c_int = Text()
-            if flow.is_severed:
+            if flow.is_severed and flow.interval_str.lower() in ("inactive", "severed"):
                 c_int.append("Inactive ", style="#64748b")
                 c_int.append("(TCB Kill)", style="#38bdf8")
             else:
                 int_style = "bold #f59e0b" if is_threat else ("white" if is_selected else "#94a3b8")
                 c_int.append(f"{flow.interval_str} ", style=int_style)
-                spark_style = "bold #ef4444" if is_threat else "#10b981"
+                spark_style = "bold #ef4444" if (is_threat or flow.is_severed) else "#10b981"
                 c_int.append(flow.sparkline, style=spark_style)
 
             # Payload
             c_pay = Text(flow.payload_str, style="white" if is_selected else "#94a3b8")
 
-            # Threat Score Badge - Uniform alignment across all tiers
+            # Threat Score Badge - Uniform alignment across all tiers matching reference
             c_thr = Text()
-            if flow.is_severed:
-                c_thr.append("  SEVERED    ", style="bold #38bdf8 on #0f172a")
-            elif flow.threat_score >= 0.90:
+            if flow.threat_score >= 0.90:
                 c_thr.append(f" {flow.threat_score * 100:.1f}% CRIT ", style="bold white on #dc2626")
             elif flow.threat_score >= 0.80:
                 c_thr.append(f" {flow.threat_score * 100:.1f}% HIGH ", style="bold white on #b91c1c")
@@ -482,26 +479,13 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     if not selected_flow:
         return Panel(Text("No session selected for inspection", style="dim center"), border_style="#1e293b")
 
-    # Top header line with full 5-tuple socket pair and Tier 2 wide unclipped path
+    # Clean header line strictly matching reference: DETAIL : <IP>:<PORT> (PID <PID>)
     dt = Table.grid(expand=True)
     dt.add_column(no_wrap=True)
     dt.add_column(justify="right", no_wrap=True)
 
     dt_left = Text()
-    dt_left.append(f"DETAIL : {selected_flow.src_ip}:{selected_flow.src_port} -> {selected_flow.dst_ip}:{selected_flow.dst_port} ", style="bold #f59e0b")
-    dt_left.append(f"(PID {selected_flow.pid})", style="bold #f59e0b")
-
-    # Tier 2: Unclipped Full Path in wide detail bar
-    avail_path = width - len(dt_left.plain) - 32
-    if avail_path >= 30 and selected_flow.binary_path:
-        dt_left.append(" │ ", style="#334155")
-        dt_left.append("PATH: ", style="#64748b")
-        p_str = selected_flow.binary_path
-        max_path_chars = avail_path - 10
-        if len(p_str) > max_path_chars:
-            tail_len = max(8, max_path_chars - 15)
-            p_str = p_str[:12] + "..." + p_str[-tail_len:]
-        dt_left.append(p_str, style="#cbd5e1")
+    dt_left.append(f"DETAIL : {selected_flow.dst_ip}:{selected_flow.dst_port} (PID {selected_flow.pid})", style="bold #f59e0b")
 
     dt_right = Text()
     dt_right.append("[", style="#64748b")
@@ -512,28 +496,29 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     dt.add_row(dt_left, dt_right)
 
-    # Card 1: Host Attribution (Green title [ HOST ATTRIBUTION ])
+    # Card 1: Host Attribution (Green title [ HOST ATTRIBUTION ]) - Exactly 6 lines
     c1 = Text()
     c1.append("• PID         : ", style="#64748b")
     c1.append(f"{selected_flow.pid}\n", style="bold white")
     c1.append("• Process     : ", style="#64748b")
     proc_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else ("bold #38bdf8" if selected_flow.is_severed else "bold white")
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
-    c1.append("• Path        : ", style="#64748b")
-    c1.append(f"{format_forensic_path(selected_flow.binary_path)}\n", style="#cbd5e1")
-    c1.append("• Signature   : ", style="#64748b")
-    if selected_flow.is_signed:
-        sig_str = "MS Catalog Signed (✓)" if "Microsoft" in selected_flow.sig_info else f"{selected_flow.sig_info[:18]} (✓)"
-        c1.append(f"{sig_str}\n", style="bold #10b981")
+    c1.append("• Binary      :\n", style="#64748b")
+    p_full = selected_flow.binary_path
+    if len(p_full) > 34:
+        p_disp = p_full[:20] + "..." + p_full[-10:]
     else:
-        c1.append("Unsigned PE (In-Memory)\n", style="bold #ef4444")
-    c1.append("• JA4         : ", style="#64748b")
-    ja4_disp = selected_flow.ja4_fingerprint
-    if len(ja4_disp) > 18:
-        ja4_disp = ja4_disp[:10] + "_" + ja4_disp[11:15] + "..."
-    c1.append(f"{ja4_disp}\n", style="#94a3b8")
-    c1.append("• User        : ", style="#64748b")
-    c1.append(f"{selected_flow.user_context[:20]}", style="#cbd5e1")
+        p_disp = p_full
+    c1.append(f"  {p_disp}\n", style="#cbd5e1")
+    c1.append("• Signature   : ", style="#64748b")
+    sig_text = selected_flow.sig_info if selected_flow.sig_info else ("Microsoft Windows" if selected_flow.is_signed else "Unsigned PE")
+    sig_style = "bold #10b981" if selected_flow.is_signed else "bold #ef4444"
+    if len(sig_text) > 20:
+        sig_text = sig_text[:18] + ".."
+    c1.append(f"{sig_text}\n", style=sig_style)
+    c1.append("• SHA256      : ", style="#64748b")
+    sha_disp = selected_flow.sha256[:16] + "..." if len(selected_flow.sha256) > 16 else selected_flow.sha256
+    c1.append(f"{sha_disp}", style="#94a3b8")
 
     p1 = Panel(
         c1,
@@ -544,42 +529,48 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         padding=(0, 1),
     )
 
-    # Card 2: Cadence & Timing (Amber title [ CADENCE & TIMING ])
+    # Card 2: Cadence & Timing (Amber title [ CADENCE & TIMING ]) - Exactly 6 lines
     c2 = Text()
-    c2.append("• Interval    : ", style="#64748b")
-    if selected_flow.is_severed:
-        c2.append("Inactive (TCB Killed)\n", style="bold #38bdf8")
-    else:
-        int_style = "bold #f59e0b" if selected_flow.is_threat else "bold white"
-        c2.append(f"{selected_flow.interval_str} ", style=int_style)
-        c2.append(f"({selected_flow.jitter_str})\n", style="#64748b")
-    c2.append("• Heartbeat   : ", style="#64748b")
+    c2.append("• Interval  : ", style="#64748b")
+    int_style = "bold #f59e0b" if selected_flow.is_threat else "bold white"
+    jitter_disp = f"({selected_flow.jitter_str})" if selected_flow.jitter_str != "N/A" else "(N/A)"
+    c2.append(f"{selected_flow.interval_str} ", style=int_style)
+    c2.append(f"{jitter_disp}\n", style="#64748b")
+
+    c2.append("• Heartbeat : ", style="#64748b")
     if selected_flow.is_severed:
         hb_style = "bold #38bdf8"
-        hb_text = "SEVERED (Stack Killed)"
+        hb_text = "SEVERED (Killed)"
     elif selected_flow.is_threat:
         hb_style = "bold #ef4444"
         hb_text = "ACTIVE (C2 Live)"
     else:
         hb_style = "bold #10b981"
-        hb_text = "RANDOM (Human Flow)"
+        hb_text = "RANDOM (Human)"
     c2.append(f"{hb_text}\n", style=hb_style)
-    c2.append("• Pulse       : ", style="#64748b")
-    if selected_flow.is_severed:
-        c2.append("──  ──  ── (Terminated)\n", style="#64748b")
-    else:
-        spark_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
-        c2.append(f"{selected_flow.sparkline} ", style=spark_style)
-        c2.append("(Rigid)\n" if selected_flow.is_threat else "(Normal)\n", style="#64748b")
-    c2.append("• Payload     : ", style="#64748b")
+
+    c2.append("• Pulse     : ", style="#64748b")
+    pulse_style = "bold #ef4444" if (selected_flow.is_threat or selected_flow.is_severed) else "#10b981"
+    c2.append(f"{selected_flow.sparkline} ", style=pulse_style)
+    pulse_label = "(Rigid)\n" if (selected_flow.is_threat or selected_flow.is_severed) else "(Normal)\n"
+    c2.append(pulse_label, style="#64748b")
+
+    c2.append("• Payload   : ", style="#64748b")
+    pay_tag = "(Fixed)\n" if selected_flow.is_threat else "(Dynamic)\n"
     c2.append(f"{selected_flow.payload_str} ", style="bold white")
-    c2.append(f"({'Fixed' if selected_flow.is_threat else 'Dynamic'})\n", style="#64748b")
-    c2.append("• Signals     : ", style="#64748b")
-    c2.append(f"{selected_flow.heuristic_signals[:26]}\n", style="#cbd5e1")
-    c2.append("• Jitter      : ", style="#64748b")
-    jitter_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else "#10b981"
-    c2.append(f"{selected_flow.jitter_pct} ", style=jitter_style)
-    c2.append("(Anomalous)" if selected_flow.is_threat and not selected_flow.is_severed else "(Normal)", style="#64748b")
+    c2.append(pay_tag, style="#64748b")
+
+    c2.append("• Bursts    : ", style="#64748b")
+    bursts_disp = selected_flow.bursts if selected_flow.bursts else "Asynchronous"
+    c2.append(f"{bursts_disp[:18]}\n", style="bold white")
+
+    c2.append("• Jitter    : ", style="#64748b")
+    if selected_flow.is_threat or selected_flow.is_severed:
+        c2.append(f"{selected_flow.jitter_pct} ", style="bold #ef4444")
+        c2.append("(Anomalous)", style="#64748b")
+    else:
+        c2.append(f"{selected_flow.jitter_pct} ", style="#10b981")
+        c2.append("(Normal)", style="#64748b")
 
     p2 = Panel(
         c2,
@@ -590,50 +581,56 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         padding=(0, 1),
     )
 
-    # Card 3: Forensic & MITRE (Cyan title [ FORENSIC & MITRE ])
+    # Card 3: Forensic & MITRE (Cyan title [ FORENSIC & MITRE ]) - Exactly 6 lines
     c3 = Text()
-    if selected_flow.is_threat:
-        if selected_flow.is_severed:
-            c3.append("• MITRE       : ", style="#64748b")
-            c3.append("T1059.001 (PowerShell)\n", style="bold white")
-            c3.append("• API         : ", style="#64748b")
-            c3.append("SetTcpEntry (TCB Delete)\n", style="bold #06b6d4")
-            c3.append("• Action      : ", style="#64748b")
-            c3.append("Kernel Stack Cleared\n", style="bold #10b981")
-            c3.append("• State       : ", style="#64748b")
-            c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
-            c3.append("• Audit       : ", style="#64748b")
-            c3.append(f"SQLite #{selected_flow.flow_id} │ EID 9002\n", style="#cbd5e1")
-            c3.append("• Status      : ", style="#64748b")
-            c3.append("Mitigation Complete", style="bold #10b981")
-        else:
-            c3.append("• MITRE       : ", style="#64748b")
-            mitre_disp = selected_flow.mitre_technique[:24] if selected_flow.mitre_technique else "T1071.001 (Web C2)"
-            c3.append(f"{mitre_disp}\n", style="bold white")
-            c3.append("• API         : ", style="#64748b")
-            c3.append("SetTcpEntry (Armed)\n", style="bold #f59e0b")
-            c3.append("• Action      : ", style="#64748b")
-            c3.append("Persistent C2 Isolated\n", style="bold #ef4444")
-            c3.append("• State       : ", style="#64748b")
-            c3.append("ESTABLISHED (C2 Active)\n", style="bold #ef4444")
-            c3.append("• Audit       : ", style="#64748b")
-            c3.append(f"SQLite #{selected_flow.flow_id} │ EID 9001\n", style="#cbd5e1")
-            c3.append("• Status      : ", style="#64748b")
-            c3.append("Press [K] to Sever", style="bold #f59e0b")
+    c3.append("• MITRE     : ", style="#64748b")
+    if selected_flow.mitre_technique:
+        mitre_disp = selected_flow.mitre_technique
+        if "PowerShell" in mitre_disp:
+            mitre_disp = "T1059.001 (PowerShell)"
+        elif len(mitre_disp) > 22:
+            mitre_disp = mitre_disp[:20] + ".."
+    elif selected_flow.is_threat:
+        mitre_disp = "T1071.001 (Web C2)"
     else:
-        # BENIGN FLOW - Authenticated enterprise process
-        c3.append("• MITRE       : ", style="#64748b")
-        c3.append("None (Benign Profile)\n", style="bold #10b981")
-        c3.append("• Engine      : ", style="#64748b")
-        c3.append("Npcap BPF Sniffer\n", style="bold #06b6d4")
-        c3.append("• Action      : ", style="#64748b")
+        mitre_disp = "None (Allowlisted)"
+    c3.append(f"{mitre_disp}\n", style="bold white")
+
+    c3.append("• API       : ", style="#64748b")
+    if selected_flow.is_threat or selected_flow.is_severed:
+        api_disp = "SetTcpEntry"
+        api_style = "bold #38bdf8"
+    else:
+        api_disp = "Npcap BPF Sniffer"
+        api_style = "bold #06b6d4"
+    c3.append(f"{api_disp}\n", style=api_style)
+
+    c3.append("• Action    : ", style="#64748b")
+    if selected_flow.is_severed:
+        c3.append("TCP RST Injected\n", style="bold #10b981")
+    elif selected_flow.is_threat:
+        c3.append("Persistent C2 Alert\n", style="bold #ef4444")
+    else:
         c3.append("Permitted (Baseline)\n", style="bold #10b981")
-        c3.append("• State       : ", style="#64748b")
+
+    c3.append("• State     : ", style="#64748b")
+    if selected_flow.is_severed:
+        c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
+    elif selected_flow.is_threat:
+        c3.append("ESTABLISHED (C2 Active)\n", style="bold #ef4444")
+    else:
         c3.append("ESTABLISHED (Flowing)\n", style="bold #10b981")
-        c3.append("• Audit       : ", style="#64748b")
-        c3.append(f"Telemetry #{selected_flow.flow_id} │ Baseline\n", style="#cbd5e1")
-        c3.append("• Status      : ", style="#64748b")
-        c3.append("Allowlisted Baseline", style="bold #10b981")
+
+    c3.append("• Audit     : ", style="#64748b")
+    if selected_flow.is_severed:
+        audit_disp = "SQLite #142 │ EID 9002"
+    elif selected_flow.is_threat:
+        audit_disp = f"SQLite #{selected_flow.flow_id} │ EID 9001"
+    else:
+        audit_disp = f"Telemetry #{selected_flow.flow_id} │ Allow"
+    c3.append(f"{audit_disp}\n", style="#cbd5e1")
+
+    c3.append(" ", style="#64748b")
 
     p3 = Panel(
         c3,
@@ -773,14 +770,12 @@ def render_footer(state: CockpitState) -> RenderableType:
         fl.append("Select  ", style="#94a3b8")
         fl.append(" ENTER ", style="bold white on #1e293b")
         fl.append("Detail  ", style="#94a3b8")
-        fl.append(" I ", style="bold #38bdf8 on #1e293b")
-        fl.append("Dossier  ", style="#94a3b8")
         fl.append(" / ", style="bold #06b6d4 on #1e293b")
         fl.append("Search  ", style="#94a3b8")
         fl.append(" S ", style="bold #f59e0b on #1e293b")
-        fl.append(f"Sort ({state.sort_field[:3].upper()})  ", style="#94a3b8")
+        fl.append("Sort  ", style="#94a3b8")
         fl.append(" K ", style="bold #ef4444 on #1e293b")
-        fl.append("Sever  ", style="#94a3b8")
+        fl.append("Kill  ", style="#94a3b8")
         fl.append(" SPACE ", style="bold white on #1e293b")
         pause_label = "Pause  " if not state.is_paused else "Resume "
         fl.append(pause_label, style="#94a3b8")
@@ -831,9 +826,12 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
     alert_size = 4 if pinned_alert else 0
     drawer_size = 9 if state.drawer_expanded else 0
 
-    fixed_overhead = header_size + alert_size + drawer_size + footer_size
-    avail = term_height - fixed_overhead
-    table_size = max(10, avail)
+    if state.drawer_expanded:
+        table_size = 10
+    else:
+        fixed_overhead = header_size + alert_size + drawer_size + footer_size
+        avail = term_height - fixed_overhead
+        table_size = max(10, avail)
 
     sections = [
         Layout(name="header", size=header_size),

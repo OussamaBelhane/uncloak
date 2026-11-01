@@ -62,6 +62,8 @@ htmlcov/
 *.sqlite3
 *.log
 uncloak.db*
+uncloak_telemetry*.json
+uncloak_dossier_*.json
 
 # Packet Captures (Strict anti-leak, fixtures explicitly unignored)
 *.pcap
