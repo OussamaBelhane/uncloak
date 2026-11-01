@@ -77,20 +77,19 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     l.append(f"{state.version}", style="bold #10b981")
     l.append(" │ ", style="#334155")
     l.append("HOST: ", style="#64748b")
-    if inner_w >= 142:
+    if inner_w >= 140:
         l.append("WIN-PROD-SRV01", style="bold white")
         l.append(" (X64)", style="#94a3b8")
-    elif inner_w >= 134:
-        l.append("WIN-PROD", style="bold white")
-        l.append(" (X64)", style="#94a3b8")
+    elif inner_w >= 132:
+        l.append("WIN-PROD-SRV01", style="bold white")
     else:
         l.append("WIN-PROD", style="bold white")
     l.append(" │ ", style="#334155")
     l.append("BPF: ", style="#64748b")
-    bpf_display = state.bpf_filter if inner_w >= 134 else "443,8443"
+    bpf_display = state.bpf_filter if inner_w >= 140 else "443,8443"
     l.append(f"{bpf_display}", style="bold white")
     l.append(" │ ", style="#334155")
-    sock_label = "TOTAL SOCKETS: " if inner_w >= 142 else "SOCKETS: "
+    sock_label = "TOTAL SOCKETS: " if inner_w >= 140 else ("SOCKETS: " if inner_w >= 132 else "SOCKS: ")
     l.append(sock_label, style="#64748b")
     l.append(f"{state.total_sockets}", style="bold #06b6d4")
 
@@ -99,9 +98,10 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     r.append(f"{state.cpu_percent:.1f}%", style="bold #10b981")
     r.append(" │ ", style="#334155")
     r.append("RAM: ", style="#64748b")
-    r.append(f"{state.ram_mb:.1f} MB", style="bold #10b981")
+    ram_str = f"{state.ram_mb:.1f} MB" if inner_w >= 130 else f"{state.ram_mb:.1f}M"
+    r.append(ram_str, style="bold #10b981")
     r.append(" │ ", style="#334155")
-    active_str = "● ACTIVE (2s)" if inner_w >= 134 else "● ACTIVE"
+    active_str = "● ACTIVE (2s)" if inner_w >= 126 else "● ACTIVE"
     if state.is_paused:
         r.append("● PAUSED", style="bold #f59e0b")
     else:
@@ -198,7 +198,7 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     total = len(visible_flows)
     has_alert = any(f.is_threat for f in state.flows)
     if table_height is not None:
-        v_size = max(2, table_height - 5)
+        v_size = max(2, table_height - 4)
     else:
         v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
     start = max(0, min(state.viewport_start, max(0, total - v_size)))
@@ -324,7 +324,6 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     container = Table.grid(expand=True)
     container.add_column()
     container.add_row(sub_header)
-    container.add_row(Text(""))
     container.add_row(table)
 
     return Panel(
@@ -365,8 +364,8 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
     c1.append("• Binary    :\n", style="#64748b")
     path_display = selected_flow.binary_path
-    if len(path_display) > 55:
-        path_display = path_display[:25] + "..." + path_display[-27:]
+    if len(path_display) > 36:
+        path_display = path_display[:18] + "..." + path_display[-15:]
     c1.append(f"  {path_display}\n", style="#cbd5e1")
     c1.append("• Signature : ", style="#64748b")
     sig_style = "bold #ef4444" if not selected_flow.is_signed else "bold #10b981"
@@ -414,22 +413,17 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     # Card 3: Forensic & MITRE
     c3 = Text()
-    c3.append("• MITRE     : ", style="#64748b")
-    mitre_val = selected_flow.mitre_technique
-    if width < 140 and len(mitre_val) > 22:
-        mitre_val = mitre_val.replace(" C2)", ")").replace(" (PowerShell)", " (PS)")
-    c3.append(f"{mitre_val}\n", style="bold white")
-    c3.append("• API       : ", style="#64748b")
+    c3.append("• MITRE : ", style="#64748b")
+    c3.append(f"{selected_flow.mitre_technique}\n", style="bold white")
+    c3.append("• API   : ", style="#64748b")
     c3.append("SetTcpEntry\n", style="bold #06b6d4")
-    c3.append("• Action    : ", style="#64748b")
+    c3.append("• Action: ", style="#64748b")
     c3.append("TCP RST Injected Stack\n", style="bold #10b981")
-    c3.append("• State     : ", style="#64748b")
+    c3.append("• State : ", style="#64748b")
     c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
-    c3.append("• Audit     : ", style="#64748b")
-    c3.append("SQLite #142 ", style="#cbd5e1")
-    c3.append("│ ", style="#334155")
-    c3.append("EID 9002\n", style="#cbd5e1")
-    c3.append(" ")
+    c3.append("• Audit : ", style="#64748b")
+    c3.append("SQLite #142  EID 9002\n", style="#cbd5e1")
+    c3.append(" ", style="dim")
     p3 = Panel(
         c3,
         title="[bold #06b6d4][ FORENSIC & MITRE ][/]",
@@ -513,14 +507,14 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
     fixed_overhead = header_size + alert_size + footer_size
 
     # Responsive vertical budgeting ensuring footer is never clipped
-    term_height = height if (height and height > 18) else 34
+    term_height = height if (height and height > 18) else 33
     avail = term_height - fixed_overhead
 
     if state.drawer_expanded:
         drawer_size = 11
-        table_size = max(7, min(11, avail - drawer_size))
+        table_size = max(10, min(14, avail - drawer_size))
     else:
-        table_size = max(11, avail)
+        table_size = max(10, avail)
 
     sections = [
         Layout(name="header", size=header_size),

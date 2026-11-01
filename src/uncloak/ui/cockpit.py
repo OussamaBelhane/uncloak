@@ -308,10 +308,10 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     fixed_overhead = 3 + (4 if has_alert else 0) + 3
                     avail = console.height - fixed_overhead
                     if state.drawer_expanded:
-                        table_size = max(7, min(11, avail - 11))
+                        table_size = max(10, min(14, avail - 11))
                     else:
-                        table_size = max(11, avail)
-                    v_size = max(2, table_size - 5)
+                        table_size = max(10, avail)
+                    v_size = max(2, table_size - 4)
 
                     if key == "UP":
                         if state.selected_index > 0:
