@@ -492,16 +492,12 @@ def run_cockpit(demo_mode: bool = True) -> int:
                 now = time.time()
                 if proc and (now - last_metric_update >= 1.0):
                     try:
-                        if not demo_mode:
-                            raw_cpu = proc.cpu_percent()
-                            cpu_count = psutil.cpu_count() or 1
-                            host_cpu = raw_cpu / cpu_count
-                            state.cpu_percent = round(min(1.4, max(0.4, host_cpu)), 1)
-                            ram_val = proc.memory_info().rss / (1024 * 1024)
-                            state.ram_mb = round(ram_val, 1)
-                        else:
-                            state.cpu_percent = 0.8
-                            state.ram_mb = 7.5
+                        raw_cpu = proc.cpu_percent()
+                        cpu_count = psutil.cpu_count() or 1
+                        host_cpu = raw_cpu / cpu_count
+                        state.cpu_percent = round(min(1.4, max(0.4, host_cpu)), 1)
+                        ram_val = proc.memory_info().rss / (1024 * 1024)
+                        state.ram_mb = round(ram_val, 1)
                     except Exception:
                         pass
                     last_metric_update = now
