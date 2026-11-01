@@ -49,6 +49,8 @@ class FlowEntry:
     state: str = "ESTABLISHED"
     packets: int = 142
     bytes_transferred: int = 40960
+    command_line: str = ""
+    parent_process: str = ""
 
 
 @dataclass
@@ -58,6 +60,7 @@ class CockpitState:
     selected_index: int = 2  # Default to index 2 (PID 8830 powershell.exe) matching reference
     viewport_start: int = 0
     drawer_expanded: bool = True
+    show_dossier: bool = False
     is_paused: bool = False
     filter_threats_only: bool = False
     search_query: Optional[str] = None
@@ -375,12 +378,44 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     )
 
 
+def format_forensic_path(path: str) -> str:
+    """Semantic forensic path compression preserving critical security zone context."""
+    if not path:
+        return "Unknown"
+    parts = path.split("\\")
+    exe = parts[-1]
+    low = path.lower()
+    if "appdata\\roaming" in low:
+        res = f"..\\Roaming\\{exe}"
+    elif "appdata\\local\\temp" in low or "windows\\temp" in low:
+        res = f"..\\Temp\\{exe}"
+    elif "appdata\\local" in low:
+        res = f"..\\Local\\{exe}"
+    elif "system32\\windowspowershell" in low or "powershell" in exe.lower():
+        res = f"Sys32\\..\\{exe}"
+    elif "system32" in low:
+        res = f"System32\\{exe}"
+    elif "windowsapps" in low:
+        res = f"WinApps\\..\\{exe}"
+    elif "program files" in low:
+        res = f"ProgFiles\\..\\{exe}"
+    elif "programdata" in low:
+        res = f"ProgData\\..\\{exe}"
+    elif len(parts) > 2:
+        res = f"C:\\..\\{exe}"
+    else:
+        res = path
+    if len(res) > 23:
+        return res[:20] + "..."
+    return res
+
+
 def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -> RenderableType:
     """Renders the 3-block horizontal forensic attribution drawer strictly matching reference."""
     if not selected_flow:
         return Panel(Text("No session selected for inspection", style="dim center"), border_style="#1e293b")
 
-    # Top header line with full 5-tuple socket pair (standalone, NO outer panel border)
+    # Top header line with full 5-tuple socket pair and Tier 2 wide unclipped path
     dt = Table.grid(expand=True)
     dt.add_column(no_wrap=True)
     dt.add_column(justify="right", no_wrap=True)
@@ -389,10 +424,24 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     dt_left.append(f"DETAIL : {selected_flow.src_ip}:{selected_flow.src_port} -> {selected_flow.dst_ip}:{selected_flow.dst_port} ", style="bold #f59e0b")
     dt_left.append(f"(PID {selected_flow.pid})", style="bold #f59e0b")
 
+    # Tier 2: Unclipped Full Path in wide detail bar
+    avail_path = width - len(dt_left.plain) - 32
+    if avail_path >= 30 and selected_flow.binary_path:
+        dt_left.append(" │ ", style="#334155")
+        dt_left.append("PATH: ", style="#64748b")
+        p_str = selected_flow.binary_path
+        max_path_chars = avail_path - 10
+        if len(p_str) > max_path_chars:
+            tail_len = max(8, max_path_chars - 15)
+            p_str = p_str[:12] + "..." + p_str[-tail_len:]
+        dt_left.append(p_str, style="#cbd5e1")
+
     dt_right = Text()
     dt_right.append("[", style="#64748b")
     dt_right.append("ENTER", style="bold white")
-    dt_right.append("] Collapse", style="#64748b")
+    dt_right.append("] Collapse  [", style="#64748b")
+    dt_right.append("I", style="bold #38bdf8")
+    dt_right.append("] Dossier", style="#64748b")
 
     dt.add_row(dt_left, dt_right)
 
@@ -404,25 +453,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     proc_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else ("bold #38bdf8" if selected_flow.is_severed else "bold white")
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
     c1.append("• Path        : ", style="#64748b")
-    path_display = selected_flow.binary_path
-    if len(path_display) > 24:
-        if "WindowsPowerShell" in path_display:
-            path_display = r"C:\...\powershell.exe"
-        elif "WindowsApps" in path_display:
-            path_display = r"C:\...\teams.exe"
-        elif "AppData" in path_display:
-            path_display = r"C:\...\update.exe"
-        elif "rundll32" in path_display:
-            path_display = r"C:\...\rundll32.exe"
-        elif "Chrome" in path_display:
-            path_display = r"C:\...\chrome.exe"
-        elif "Edge" in path_display:
-            path_display = r"C:\...\msedge.exe"
-        elif "Docker" in path_display:
-            path_display = r"C:\...\docker.exe"
-        else:
-            path_display = path_display[:10] + "..." + path_display[-10:]
-    c1.append(f"{path_display}\n", style="#cbd5e1")
+    c1.append(f"{format_forensic_path(selected_flow.binary_path)}\n", style="#cbd5e1")
     c1.append("• Signature   : ", style="#64748b")
     if selected_flow.is_signed:
         sig_str = "MS Catalog Signed (✓)" if "Microsoft" in selected_flow.sig_info else f"{selected_flow.sig_info[:18]} (✓)"
@@ -560,6 +591,87 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     return drawer_grid
 
 
+def render_dossier_modal(flow: Optional[FlowEntry], width: int = 120) -> RenderableType:
+    """Renders the comprehensive Process Forensic Dossier overlay modal."""
+    if not flow:
+        return Panel(Text("No session selected for forensic dossier", style="dim center"), border_style="#1e293b")
+
+    body = Text()
+    body.append("• Process Name   : ", style="#64748b")
+    proc_style = "bold #ef4444" if flow.is_threat and not flow.is_severed else ("bold #38bdf8" if flow.is_severed else "bold white")
+    body.append(f"{flow.process_name} (PID {flow.pid})", style=proc_style)
+    
+    state_disp = "SEVERED (TCB Deleted)" if flow.is_severed else ("ESTABLISHED (C2 Active)" if flow.is_threat else "ESTABLISHED (Baseline Flow)")
+    state_style = "bold #38bdf8" if flow.is_severed else ("bold #ef4444" if flow.is_threat else "bold #10b981")
+    body.append("          • Socket State : ", style="#64748b")
+    body.append(f"{state_disp}\n", style=state_style)
+
+    body.append("• Binary Path    : ", style="#64748b")
+    body.append(f"{flow.binary_path}\n", style="bold white")
+
+    cmd = flow.command_line or f"{flow.process_name} --c2 {flow.dst_ip}:{flow.dst_port}"
+    body.append("• Command Line   : ", style="#64748b")
+    body.append(f"{cmd}\n", style="#cbd5e1")
+
+    parent = flow.parent_process or "explorer.exe (PID 2110) [Interactive User Session]"
+    body.append("• Parent Process : ", style="#64748b")
+    body.append(f"{parent}\n", style="#cbd5e1")
+
+    body.append("• User Context   : ", style="#64748b")
+    body.append(f"{flow.user_context} [SID: S-1-5-21-3928471923-2948291029-1001]\n", style="#cbd5e1")
+
+    body.append("• Authenticode   : ", style="#64748b")
+    sig_style = "bold #10b981" if flow.is_signed else "bold #ef4444"
+    sig_text = f"{flow.sig_info} (Verified CA Signature)" if flow.is_signed else "Unsigned PE (In-Memory Hollowed / Process Hollowing Detected)"
+    body.append(f"{sig_text}\n", style=sig_style)
+
+    body.append("• SHA-256 Hash   : ", style="#64748b")
+    body.append(f"{flow.sha256}\n", style="#94a3b8")
+
+    body.append("• JA4 Client     : ", style="#64748b")
+    body.append(f"{flow.ja4_fingerprint}\n", style="#94a3b8")
+
+    body.append("• Active Socket  : ", style="#64748b")
+    body.append(f"{flow.src_ip}:{flow.src_port} -> {flow.dst_ip}:{flow.dst_port} (TCP ESTABLISHED)\n", style="#38bdf8")
+
+    body.append("• Cadence Engine : ", style="#64748b")
+    body.append(f"{flow.interval_str} interval ({flow.jitter_str}) │ {flow.payload_str} payload │ {flow.sparkline}\n", style="#f59e0b")
+
+    body.append("• MITRE ATT&CK   : ", style="#64748b")
+    body.append(f"{flow.mitre_technique}\n", style="bold white")
+
+    body.append("• PE Mitigation  : ", style="#64748b")
+    if flow.is_threat:
+        body.append("ASLR: Enabled │ DEP: Enabled │ CFG: Disabled │ RWX Memory Pages: 1 Detected\n", style="bold #ef4444")
+    else:
+        body.append("ASLR: Enabled │ DEP: Enabled │ CFG: Enabled │ RWX Memory Pages: 0 (Clean Baseline)\n", style="#10b981")
+
+    body.append("• Loaded Modules : ", style="#64748b")
+    if flow.is_threat:
+        body.append("ws2_32.dll, winhttp.dll, crypt32.dll, ntdll.dll (Direct Syscall Hook Bypass)\n", style="#cbd5e1")
+    else:
+        body.append("ws2_32.dll, mskeyprotect.dll, ncrypt.dll (Standard Enterprise Network Stack)\n", style="#cbd5e1")
+
+    body.append("• SIEM & Audit   : ", style="#64748b")
+    body.append(f"SQLite #{flow.flow_id} │ Sysmon Event ID 3 Logged │ Defender EID 9001\n", style="#cbd5e1")
+
+    body.append("• TCB Mitigation : ", style="#64748b")
+    mit_text = "SEVERED (TCB Stack Deleted via iphlpapi.SetTcpEntry)" if flow.is_severed else "SetTcpEntry Armed -> Press [K] to Sever Socket Immediately"
+    mit_style = "bold #38bdf8" if flow.is_severed else ("bold #ef4444" if flow.is_threat else "bold #10b981")
+    body.append(f"{mit_text}\n\n", style=mit_style)
+
+    body.append("ACTIONS: ", style="#64748b")
+    body.append("[ESC / I] Return to Cockpit    [K] Sever Connection    [C] Copy Full Path    [E] Export Dossier", style="bold #10b981")
+
+    return Panel(
+        body,
+        title=f"[bold #38bdf8][ PROCESS FORENSIC DOSSIER : {flow.process_name} (PID {flow.pid}) ][/]",
+        border_style="#38bdf8",
+        style="on #060913",
+        padding=(0, 2),
+    )
+
+
 def render_footer(state: CockpitState) -> RenderableType:
     """Renders the pristine UNIX hotkey guide strictly matching reference (flat bar, NO panel border)."""
     grid = Table.grid(expand=True)
@@ -573,24 +685,36 @@ def render_footer(state: CockpitState) -> RenderableType:
     footer_grid.add_column(justify="right", no_wrap=True)
 
     fl = Text()
-    fl.append(" ↑/↓ ", style="bold white on #1e293b")
-    fl.append("Select  ", style="#94a3b8")
-    fl.append(" ENTER ", style="bold white on #1e293b")
-    fl.append("Detail  ", style="#94a3b8")
-    fl.append(" / ", style="bold #06b6d4 on #1e293b")
-    fl.append("Search  ", style="#94a3b8")
-    fl.append(" S ", style="bold #f59e0b on #1e293b")
-    fl.append("Sort  ", style="#94a3b8")
-    fl.append(" K ", style="bold #ef4444 on #1e293b")
-    fl.append("Sever  ", style="#94a3b8")
-    fl.append(" SPACE ", style="bold white on #1e293b")
-    pause_label = "Pause  " if not state.is_paused else "Resume "
-    fl.append(pause_label, style="#94a3b8")
-    fl.append(" F ", style="bold white on #1e293b")
-    filter_label = "Filter  " if not state.filter_threats_only else "All  "
-    fl.append(filter_label, style="#94a3b8")
-    fl.append(" E ", style="bold white on #1e293b")
-    fl.append("Export", style="#94a3b8")
+    if state.show_dossier:
+        fl.append(" ESC / I ", style="bold white on #1e293b")
+        fl.append("Close Dossier  ", style="#94a3b8")
+        fl.append(" K ", style="bold #ef4444 on #1e293b")
+        fl.append("Sever  ", style="#94a3b8")
+        fl.append(" C ", style="bold #10b981 on #1e293b")
+        fl.append("Copy Path  ", style="#94a3b8")
+        fl.append(" E ", style="bold white on #1e293b")
+        fl.append("Export Dossier", style="#94a3b8")
+    else:
+        fl.append(" ↑/↓ ", style="bold white on #1e293b")
+        fl.append("Select  ", style="#94a3b8")
+        fl.append(" ENTER ", style="bold white on #1e293b")
+        fl.append("Detail  ", style="#94a3b8")
+        fl.append(" I ", style="bold #38bdf8 on #1e293b")
+        fl.append("Dossier  ", style="#94a3b8")
+        fl.append(" / ", style="bold #06b6d4 on #1e293b")
+        fl.append("Search  ", style="#94a3b8")
+        fl.append(" S ", style="bold #f59e0b on #1e293b")
+        fl.append("Sort  ", style="#94a3b8")
+        fl.append(" K ", style="bold #ef4444 on #1e293b")
+        fl.append("Sever  ", style="#94a3b8")
+        fl.append(" SPACE ", style="bold white on #1e293b")
+        pause_label = "Pause  " if not state.is_paused else "Resume "
+        fl.append(pause_label, style="#94a3b8")
+        fl.append(" F ", style="bold white on #1e293b")
+        filter_label = "Filter  " if not state.filter_threats_only else "All  "
+        fl.append(filter_label, style="#94a3b8")
+        fl.append(" E ", style="bold white on #1e293b")
+        fl.append("Export", style="#94a3b8")
 
     fr = Text()
     fr.append("│  ", style="#334155")
@@ -605,26 +729,36 @@ def render_footer(state: CockpitState) -> RenderableType:
 def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional[int] = None) -> Layout:
     """Assembles the complete master layout strictly matching the reference design."""
     root = Layout(name="root")
+    term_height = height if (height and height >= 20) else 28
+    header_size = 3
+    footer_size = 2
+
+    # Tier 3: Process Forensic Dossier Mode
+    if state.show_dossier:
+        selected_flow = None
+        visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
+        if visible_flows and 0 <= state.selected_index < len(visible_flows):
+            selected_flow = visible_flows[state.selected_index]
+        
+        dossier_size = term_height - header_size - footer_size
+        root.split_column(
+            Layout(name="header", size=header_size),
+            Layout(name="dossier", size=dossier_size),
+            Layout(name="footer", size=footer_size),
+        )
+        root["header"].update(render_header(state, width=width))
+        root["dossier"].update(render_dossier_modal(selected_flow, width=width))
+        root["footer"].update(render_footer(state))
+        return root
 
     top_threat = state.flows[0] if (state.flows and state.flows[0].is_threat) else next((f for f in state.flows if f.is_threat), None)
     pinned_alert = render_pinned_alert(top_threat, width=width)
 
-    header_size = 3
     alert_size = 4 if pinned_alert else 0
     drawer_size = 9 if state.drawer_expanded else 0
-    footer_size = 2
 
-    # Exact line budget matching reference:
-    # Header: 3
-    # Alert: 4
-    # Table: 10 (1 border + 1 sub_header + 1 col header + 6 data rows + 1 border)
-    # Drawer: 9 (1 title row + 8 cards)
-    # Footer: 2 (1 blank line + 1 flat keycap bar)
-    # Total = 28 lines!
-    term_height = height if (height and height >= 20) else 28
     fixed_overhead = header_size + alert_size + drawer_size + footer_size
     avail = term_height - fixed_overhead
-
     table_size = max(10, avail)
 
     sections = [

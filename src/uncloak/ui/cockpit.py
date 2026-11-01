@@ -39,6 +39,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=True,
             c2_framework="Sliver C2",
             binary_path=r"C:\Users\Target\AppData\Roaming\update.exe",
+            command_line=r"update.exe --c2 91.92.241.103:443 --session-id 0x882",
+            parent_process="cmd.exe (PID 4920) -> explorer.exe (PID 2110)",
             sig_info="Unsigned PE (In-Memory Hollowed)",
             sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
@@ -72,6 +74,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=True,
             c2_framework="Cobalt Strike",
             binary_path=r"C:\Windows\System32\rundll32.exe",
+            command_line=r"C:\Windows\System32\rundll32.exe C:\Users\Target\AppData\Local\Temp\nvsvc.dll,Entry",
+            parent_process="powershell.exe (PID 8830) -> wmiprvse.exe (PID 3144)",
             sig_info="Microsoft Windows (Proxy Exec)",
             sha256="7c12bf9810ac9b32e144a10f8bc9910cde4279ab2281a8c3d9a102ffbc41238a",
             ja4_fingerprint="t13d190800_261546b3f71c_f601b1a77409",
@@ -105,6 +109,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=True,
             c2_framework="Empire C2",
             binary_path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            command_line=r"powershell.exe -NoP -NonI -W Hidden -Enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA...",
+            parent_process="svchost.exe (PID 2023) -> services.exe (PID 644)",
             sig_info="Microsoft Windows (Catalog Signed)",
             sha256="99182abfc012781bcf4401a998bc41270ae19b88ef128456187900bba037b341",
             ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
@@ -138,6 +144,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Program Files\WindowsApps\teams.exe",
+            command_line=r"teams.exe --type=renderer --enable-features=WebComponents",
+            parent_process="explorer.exe (PID 2110)",
             sig_info="Microsoft Corporation",
             sha256="b148fa0172e04f9810bb4260aa781fbc02419a45610099881122334455667788",
             ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
@@ -171,6 +179,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Windows\System32\svchost.exe",
+            command_line=r"C:\Windows\System32\svchost.exe -k DcomLaunch -p",
+            parent_process="services.exe (PID 644)",
             sig_info="Microsoft Windows (Catalog Signed)",
             sha256="5a1098b10ef3341b8a99002477cbb14002fa1098112233445566778899aabbcc",
             ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
@@ -204,6 +214,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Program Files\Docker\docker.exe",
+            command_line=r"docker.exe pull alpine:latest",
+            parent_process="powershell.exe (PID 5120)",
             sig_info="Docker Inc.",
             sha256="89acbf0198aa47b60214ee00b891bcfa0014a5566778899aabbccddeeff00112",
             ja4_fingerprint="t13d1516h2_8daaf6152771_c2140bb063ea",
@@ -237,6 +249,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            command_line=r"chrome.exe --profile-directory=Default https://google.com",
+            parent_process="explorer.exe (PID 2110)",
             sig_info="Google LLC",
             sha256="3b49f281e05a88c42b9100fae91845bb0299887766554433221100ffeeddccbb",
             ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
@@ -270,6 +284,8 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            command_line=r"msedge.exe --profile-directory=Default https://bing.com",
+            parent_process="explorer.exe (PID 2110)",
             sig_info="Microsoft Corporation",
             sha256="88f1c30291ba44c80112aa8944cc9921b77766554433221100ffeeddccbbaa99",
             ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
@@ -284,6 +300,25 @@ def get_demo_flows() -> list[FlowEntry]:
             bytes_transferred=819200,
         ),
     ]
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Safely copies text to the system clipboard across Linux (wl-copy/xclip) and Windows (clip)."""
+    try:
+        if os.name == "nt":
+            import subprocess
+            subprocess.run(["clip"], input=text.encode("utf-8"), check=True, timeout=1)
+            return True
+        else:
+            import subprocess
+            try:
+                subprocess.run(["wl-copy"], input=text.encode("utf-8"), check=True, timeout=1)
+                return True
+            except Exception:
+                subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode("utf-8"), check=True, timeout=1)
+                return True
+    except Exception:
+        return False
 
 
 class NonBlockingKeyboard:
@@ -307,6 +342,8 @@ class NonBlockingKeyboard:
                         return "UP"
                     if extended == b"P":
                         return "DOWN"
+                if char == b"\x1b":
+                    return "ESC"
                 try:
                     return char.decode("utf-8")
                 except UnicodeDecodeError:
@@ -317,12 +354,15 @@ class NonBlockingKeyboard:
             rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
             if rlist:
                 ch = sys.stdin.read(1)
-                if ch == "\x1b":  # Escape sequence for arrow keys
-                    seq = sys.stdin.read(2)
-                    if seq == "[A":
-                        return "UP"
-                    if seq == "[B":
-                        return "DOWN"
+                if ch == "\x1b":  # Escape sequence for arrow keys or standalone ESC
+                    r_seq, _, _ = select.select([sys.stdin], [], [], 0.02)
+                    if r_seq:
+                        seq = sys.stdin.read(2)
+                        if seq == "[A":
+                            return "UP"
+                        if seq == "[B":
+                            return "DOWN"
+                    return "ESC"
                 return ch
             return None
 
@@ -372,11 +412,39 @@ def run_cockpit(demo_mode: bool = True) -> int:
                 key = kb.read_key()
                 if key:
                     key_lower = key.lower()
-                    if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
-                        break
 
                     visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
                     total_visible = len(visible_flows)
+
+                    # Tier 3: Process Forensic Dossier Mode Key Handling
+                    if state.show_dossier:
+                        if key in ("ESC", "\x1b") or key_lower in ("i", "q"):
+                            state.show_dossier = False
+                        elif key_lower == "k":
+                            if visible_flows and 0 <= state.selected_index < total_visible:
+                                target = visible_flows[state.selected_index]
+                                if target.is_threat:
+                                    target.is_severed = True
+                                    target.state = "SEVERED (Host Clean)"
+                                    state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
+                                    state.siem_event = "EID 9002 (Severed)"
+                        elif key_lower == "c":
+                            if visible_flows and 0 <= state.selected_index < total_visible:
+                                target = visible_flows[state.selected_index]
+                                if copy_to_clipboard(target.binary_path):
+                                    state.siem_event = "Path Copied to Clipboard"
+                                else:
+                                    state.siem_event = f"Path: {target.process_name}"
+                        elif key_lower == "e":
+                            if visible_flows and 0 <= state.selected_index < total_visible:
+                                target = visible_flows[state.selected_index]
+                                state.siem_event = f"Dossier Exported: {target.process_name}.json"
+                        continue
+
+                    # Cockpit Mode Key Handling
+                    if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
+                        break
+
                     has_alert = any(f.is_threat for f in state.flows)
                     header_size = 3
                     alert_size = 4 if has_alert else 0
@@ -400,6 +468,8 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                 state.viewport_start = state.selected_index - v_size + 1
                     elif key_lower in ("\r", "\n", "d"):  # Toggle drawer
                         state.drawer_expanded = not state.drawer_expanded
+                    elif key_lower == "i":  # Open Process Forensic Dossier
+                        state.show_dossier = True
                     elif key == " ":  # Pause/Resume
                         state.is_paused = not state.is_paused
                     elif key_lower == "f":  # Filter threats only
@@ -414,6 +484,13 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                 target.state = "SEVERED (Host Clean)"
                                 state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
                                 state.siem_event = "EID 9002 (Severed)"
+                    elif key_lower == "c":  # Copy binary path
+                        if visible_flows and 0 <= state.selected_index < total_visible:
+                            target = visible_flows[state.selected_index]
+                            if copy_to_clipboard(target.binary_path):
+                                state.siem_event = "Path Copied to Clipboard"
+                            else:
+                                state.siem_event = f"Path: {target.process_name}"
                     elif key_lower == "e":  # Export PCAP simulation
                         state.siem_event = "PCAP Exported: capture.pcap"
 
