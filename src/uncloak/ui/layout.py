@@ -423,11 +423,11 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
             # Interval & Cadence
             c_int = Text()
             if is_severed:
-                c_int.append(f"{'Inactive':<10}", style="#64748b")
+                c_int.append(f"{'Severed':<8}", style="#64748b")
                 c_int.append("(TCB Kill)", style="bold #38bdf8")
             else:
                 int_style = "bold #f59e0b" if is_threat else ("white" if is_selected else "#94a3b8")
-                c_int.append(f"{flow.interval_str:<10}", style=int_style)
+                c_int.append(f"{flow.interval_str:<8}", style=int_style)
                 if flow.sparkline:
                     spark_style = "bold #ef4444" if is_threat else ("#10b981" if "▎" in flow.sparkline else "#475569")
                     c_int.append(flow.sparkline, style=spark_style)
