@@ -33,6 +33,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE.pcap",
         help="Offline triage mode: replay and analyze a PCAP capture file",
     )
+    mode_group.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch the dedicated enterprise WebView2 desktop cockpit window (default on Windows desktop)",
+    )
+    mode_group.add_argument(
+        "--cli",
+        action="store_true",
+        help="Force pure terminal CUI cockpit execution (for SSH, WinRM, or headless servers)",
+    )
     
     # Ingestion tuning
     parser.add_argument(
@@ -79,7 +89,16 @@ def main(args: Optional[list[str]] = None) -> int:
         print(f"[*] Uncloak v0.1.0 headless NDJSON streaming initialized (Filter: '{parsed_args.filter}')")
         return 0
 
-    # Direct Sovereign Cockpit Execution (Htop / K9s Standard)
+    if parsed_args.cli:
+        from uncloak.ui.cockpit import run_cockpit
+        return run_cockpit(demo_mode=True)
+
+    if parsed_args.gui or (sys.platform == "win32" and not parsed_args.cli):
+        # Default on Windows desktop is the dedicated WebView2 Desktop Cockpit window
+        from uncloak.ui.desktop import launch_desktop
+        return launch_desktop()
+
+    # Default on Linux/macOS terminal
     from uncloak.ui.cockpit import run_cockpit
     return run_cockpit(demo_mode=True)
 
