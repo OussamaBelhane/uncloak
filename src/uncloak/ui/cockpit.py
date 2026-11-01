@@ -30,7 +30,7 @@ def get_demo_flows() -> list[FlowEntry]:
             dst_port=443,
             sni="",
             interval_str="8.4s",
-            sparkline="▂▄▆▅▆▇▅█",
+            sparkline="█ · █ · █ · █",
             jitter_str="±0.8s",
             jitter_pct="9.5%",
             payload_str="512 B",
@@ -65,7 +65,7 @@ def get_demo_flows() -> list[FlowEntry]:
             dst_port=8443,
             sni="cdn-azure-edge.net",
             interval_str="15.0s",
-            sparkline="▅▆▆▅▆█",
+            sparkline="█ · · █ · · █",
             jitter_str="±1.1s",
             jitter_pct="7.3%",
             payload_str="1.2 KB",
@@ -100,7 +100,7 @@ def get_demo_flows() -> list[FlowEntry]:
             dst_port=443,
             sni="api.telemetry-host.org",
             interval_str="60.0s",
-            sparkline="▇▇▇▇▇",
+            sparkline="█ · · █ · · █",
             jitter_str="±2.4s",
             jitter_pct="4.0%",
             payload_str="768 B",
@@ -118,9 +118,9 @@ def get_demo_flows() -> list[FlowEntry]:
             detection_reasons="Direct IP (No SNI) │ Static 768B Beacon",
             bursts="5 bursts / 5m",
             user_context=r"CORP\jdoe (Standard)",
-            is_severed=True,
+            is_severed=False,
             mitre_technique="T1059.001 (PowerShell C2)",
-            state="SEVERED (Host Clean)",
+            state="ESTABLISHED",
             packets=45,
             bytes_transferred=14336,
         ),
@@ -492,12 +492,16 @@ def run_cockpit(demo_mode: bool = True) -> int:
                 now = time.time()
                 if proc and (now - last_metric_update >= 1.0):
                     try:
-                        raw_cpu = proc.cpu_percent()
-                        cpu_count = psutil.cpu_count() or 1
-                        host_cpu = raw_cpu / cpu_count
-                        state.cpu_percent = round(min(1.4, max(0.4, host_cpu)), 1)
-                        ram_val = proc.memory_info().rss / (1024 * 1024)
-                        state.ram_mb = round(ram_val, 1)
+                        if not demo_mode:
+                            raw_cpu = proc.cpu_percent()
+                            cpu_count = psutil.cpu_count() or 1
+                            host_cpu = raw_cpu / cpu_count
+                            state.cpu_percent = round(min(1.4, max(0.4, host_cpu)), 1)
+                            ram_val = proc.memory_info().rss / (1024 * 1024)
+                            state.ram_mb = round(ram_val, 1)
+                        else:
+                            state.cpu_percent = 0.8
+                            state.ram_mb = 7.4
                     except Exception:
                         pass
                     last_metric_update = now
