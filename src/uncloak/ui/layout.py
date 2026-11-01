@@ -320,7 +320,7 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     sh_right.append(" │ ", style="#334155")
     sh_right.append("[ENTER] Toggle Drawer", style="#94a3b8")
 
-    sh.add_row(sh_left, sh_right)
+    sh.add_row(sh_left, sh_right, style="on #090e1c")
 
     # Dynamic Column Headers matching active sort field
     hdr_pid = "PID ▲" if state.sort_field == "pid" else "PID"
@@ -450,18 +450,18 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
 
             # Row background style
             if is_severed:
-                row_bg = "on #0f172a" if is_selected else None
+                row_bg = "on #0f172a" if is_selected else "on #090e1c"
             elif is_threat:
                 row_bg = "on #2d0c0c" if is_selected else "on #1a0808"
             else:
-                row_bg = "on #131e33" if is_selected else None
+                row_bg = "on #131e33" if is_selected else "on #090e1c"
 
             table.add_row(c_pid, c_proc, c_dst, c_sni, c_int, c_pay, c_thr, style=row_bg)
 
     container = Table.grid(expand=True)
     container.add_column()
-    container.add_row(sh)
-    container.add_row(table)
+    container.add_row(sh, style="on #090e1c")
+    container.add_row(table, style="on #090e1c")
 
     return Panel(
         container,
@@ -693,8 +693,8 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     drawer_grid = Table.grid(expand=True)
     drawer_grid.add_column()
-    drawer_grid.add_row(dt)
-    drawer_grid.add_row(dg)
+    drawer_grid.add_row(dt, style="on #020617")
+    drawer_grid.add_row(dg, style="on #020617")
 
     return drawer_grid
 
@@ -780,13 +780,13 @@ def render_dossier_modal(flow: Optional[FlowEntry], width: int = 120) -> Rendera
     )
 
 
-def render_footer(state: CockpitState) -> RenderableType:
+def render_footer(state: CockpitState, width: int = 120) -> RenderableType:
     """Renders the pristine UNIX hotkey guide strictly matching reference (flat bar, NO panel border)."""
     grid = Table.grid(expand=True)
     grid.add_column()
     
     # 1 blank line for vertical breathing room matching reference
-    grid.add_row("")
+    grid.add_row(Text(" " * width, style="on #020617"))
 
     footer_grid = Table.grid(expand=True)
     footer_grid.add_column(no_wrap=True)
@@ -834,8 +834,8 @@ def render_footer(state: CockpitState) -> RenderableType:
     fr.append(" Q ", style="bold white on #1e293b")
     fr.append("Quit", style="#94a3b8")
 
-    footer_grid.add_row(fl, fr)
-    grid.add_row(footer_grid)
+    footer_grid.add_row(fl, fr, style="on #020617")
+    grid.add_row(footer_grid, style="on #020617")
     return grid
 
 
@@ -861,7 +861,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
         )
         root["header"].update(render_header(state, width=width))
         root["dossier"].update(render_dossier_modal(selected_flow, width=width))
-        root["footer"].update(render_footer(state))
+        root["footer"].update(render_footer(state, width=width))
         return root
 
     active_threats = [f for f in state.flows if f.is_threat and not f.is_severed]
@@ -916,17 +916,17 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
 
     root["header"].update(render_header(state, width=width))
     if has_gaps:
-        root["gap_1"].update(Text(""))
+        root["gap_1"].update(Text(" " * width, style="on #020617"))
 
     if pinned_alert:
         root["alert"].update(pinned_alert)
         if has_gaps:
-            root["gap_2"].update(Text(""))
+            root["gap_2"].update(Text(" " * width, style="on #020617"))
 
     root["main_table"].update(render_table(state, width=width, table_height=table_size))
 
     if has_gaps:
-        root["gap_3"].update(Text(""))
+        root["gap_3"].update(Text(" " * width, style="on #020617"))
 
     if state.drawer_expanded:
         selected_flow = None
@@ -935,7 +935,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
             selected_flow = visible_flows[state.selected_index]
         root["drawer"].update(render_bottom_drawer(selected_flow, width=width))
         if has_gaps and surplus >= 4:
-            root["gap_4"].update(Text(""))
+            root["gap_4"].update(Text(" " * width, style="on #020617"))
 
-    root["footer"].update(render_footer(state))
+    root["footer"].update(render_footer(state, width=width))
     return root

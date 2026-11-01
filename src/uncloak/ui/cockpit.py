@@ -505,9 +505,44 @@ class NonBlockingKeyboard:
                 pass
 
 
+def setup_terminal() -> None:
+    """Configures terminal VT mode and sets dark palette."""
+    if os.name == "nt":
+        import ctypes
+        try:
+            kernel32 = ctypes.windll.kernel32
+            h_out = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+            mode = ctypes.c_ulong()
+            if kernel32.GetConsoleMode(h_out, ctypes.byref(mode)):
+                # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+                # DISABLE_NEWLINE_AUTO_RETURN = 0x0008
+                kernel32.SetConsoleMode(h_out, mode.value | 0x0004 | 0x0008)
+        except Exception:
+            pass
+
+    # Set terminal window title
+    sys.stdout.write("\033]0;UNCLOAK :: Enterprise C2 Cockpit\007")
+    # OSC 11: Set default terminal background to deep obsidian #020617
+    sys.stdout.write("\033]11;#020617\007")
+    # OSC 10: Set default terminal foreground to clean off-white #f8fafc
+    sys.stdout.write("\033]10;#f8fafc\007")
+    sys.stdout.flush()
+
+
+def restore_terminal() -> None:
+    """Restores default terminal palette and title."""
+    try:
+        # OSC 111 / 110: Restore default terminal background and foreground
+        sys.stdout.write("\033]111\007\033]110\007")
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
 def run_cockpit(demo_mode: bool = True) -> int:
     """Executes the interactive terminal event loop with live psutil telemetry."""
-    console = Console()
+    setup_terminal()
+    console = Console(color_system="truecolor")
     state = CockpitState(flows=get_demo_flows())
     kb = NonBlockingKeyboard()
 
@@ -712,6 +747,7 @@ def run_cockpit(demo_mode: bool = True) -> int:
         pass
     finally:
         kb.restore()
+        restore_terminal()
 
     console.print("\n[bold #10b981][*] Uncloak session ended cleanly.[/]")
     return 0
