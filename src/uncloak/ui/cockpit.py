@@ -402,15 +402,16 @@ class NonBlockingKeyboard:
         if not self.is_windows:
             import termios
             import tty
-            self.old_settings = termios.tcgetattr(sys.stdin)
-            tty.setcbreak(sys.stdin.fileno())
+            self.fd = sys.stdin.fileno()
+            self.old_settings = termios.tcgetattr(self.fd)
+            tty.setcbreak(self.fd)
 
     def read_key(self) -> Optional[str]:
         if self.is_windows:
             import msvcrt
             if msvcrt.kbhit():
                 char = msvcrt.getch()
-                if char in (b"\x00", b"\xe0"):  # Arrow keys / special keys
+                if char in (b"\x00", b"\xe0"):  # Extended scancodes
                     extended = msvcrt.getch()
                     if extended == b"H":
                         return "UP"
@@ -420,6 +421,14 @@ class NonBlockingKeyboard:
                         return "LEFT"
                     if extended == b"M":
                         return "RIGHT"
+                    if extended == b"G":
+                        return "HOME"
+                    if extended == b"O":
+                        return "END"
+                    if extended == b"I":
+                        return "PAGE_UP"
+                    if extended == b"Q":
+                        return "PAGE_DOWN"
                     return None
                 if char == b"\x1b":
                     return "ESC"
@@ -427,6 +436,8 @@ class NonBlockingKeyboard:
                     return "ENTER"
                 if char in (b"\x08", b"\x7f"):
                     return "BACKSPACE"
+                if char == b" ":
+                    return " "
                 try:
                     return char.decode("utf-8")
                 except UnicodeDecodeError:
@@ -434,34 +445,62 @@ class NonBlockingKeyboard:
             return None
         else:
             import select
-            rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
+            rlist, _, _ = select.select([self.fd], [], [], 0.05)
             if rlist:
-                ch = sys.stdin.read(1)
-                if ch == "\x1b":  # Escape sequence for arrow keys or standalone ESC
-                    r_seq, _, _ = select.select([sys.stdin], [], [], 0.02)
+                try:
+                    data = os.read(self.fd, 32)
+                except OSError:
+                    return None
+                if not data:
+                    return None
+
+                # Standalone ESC check
+                if data == b"\x1b":
+                    r_seq, _, _ = select.select([self.fd], [], [], 0.02)
                     if r_seq:
-                        seq = sys.stdin.read(2)
-                        if seq == "[A":
-                            return "UP"
-                        if seq == "[B":
-                            return "DOWN"
-                        if seq == "[C":
-                            return "RIGHT"
-                        if seq == "[D":
-                            return "LEFT"
+                        try:
+                            data += os.read(self.fd, 16)
+                        except OSError:
+                            pass
+                    else:
+                        return "ESC"
+
+                # ANSI / VT100 / XTerm / Kitty escape sequences
+                if data in (b"\x1b[A", b"\x1bOA"):
+                    return "UP"
+                if data in (b"\x1b[B", b"\x1bOB"):
+                    return "DOWN"
+                if data in (b"\x1b[C", b"\x1bOC"):
+                    return "RIGHT"
+                if data in (b"\x1b[D", b"\x1bOD"):
+                    return "LEFT"
+                if data in (b"\x1b[H", b"\x1b[1~", b"\x1bOH"):
+                    return "HOME"
+                if data in (b"\x1b[F", b"\x1b[4~", b"\x1bOF"):
+                    return "END"
+                if data == b"\x1b[5~":
+                    return "PAGE_UP"
+                if data == b"\x1b[6~":
+                    return "PAGE_DOWN"
+                if data == b"\x1b":
                     return "ESC"
-                if ch in ("\r", "\n"):
+                if data in (b"\r", b"\n"):
                     return "ENTER"
-                if ch in ("\x7f", "\x08"):
+                if data in (b"\x7f", b"\x08"):
                     return "BACKSPACE"
-                return ch
+                if data == b" ":
+                    return " "
+                try:
+                    return data.decode("utf-8")
+                except UnicodeDecodeError:
+                    return None
             return None
 
     def restore(self) -> None:
         if not self.is_windows:
             import termios
             try:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+                termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
             except Exception:
                 pass
 
@@ -547,6 +586,8 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                 target = visible_flows[state.selected_index]
                                 if target.is_threat:
                                     target.is_severed = True
+                                    target.threat_score = 0.0
+                                    target.threat_label = "SAFE"
                                     target.state = "SEVERED (Host Clean)"
                                     state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
                                     state.siem_event = f"EID 9002 (Severed PID {target.pid})"
@@ -598,6 +639,21 @@ def run_cockpit(demo_mode: bool = True) -> int:
                             state.selected_index += 1
                             if state.selected_index >= state.viewport_start + v_size:
                                 state.viewport_start = state.selected_index - v_size + 1
+                    elif key == "PAGE_UP":
+                        state.selected_index = max(0, state.selected_index - v_size)
+                        state.viewport_start = max(0, state.viewport_start - v_size)
+                    elif key == "PAGE_DOWN":
+                        if total_visible > 0:
+                            state.selected_index = min(total_visible - 1, state.selected_index + v_size)
+                            if state.selected_index >= state.viewport_start + v_size:
+                                state.viewport_start = min(max(0, total_visible - v_size), state.viewport_start + v_size)
+                    elif key == "HOME":
+                        state.selected_index = 0
+                        state.viewport_start = 0
+                    elif key == "END":
+                        if total_visible > 0:
+                            state.selected_index = total_visible - 1
+                            state.viewport_start = max(0, total_visible - v_size)
                     elif key in ("ENTER", "\r", "\n") or key_lower == "d":  # Toggle drawer
                         state.drawer_expanded = not state.drawer_expanded
                     elif key_lower == "i":  # Open Process Forensic Dossier
@@ -628,6 +684,8 @@ def run_cockpit(demo_mode: bool = True) -> int:
                             target = visible_flows[state.selected_index]
                             if target.is_threat:
                                 target.is_severed = True
+                                target.threat_score = 0.0
+                                target.threat_label = "SAFE"
                                 target.state = "SEVERED (Host Clean)"
                                 state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
                                 state.siem_event = f"EID 9002 (Severed PID {target.pid})"
