@@ -553,17 +553,30 @@ def run_cockpit(demo_mode: bool = True) -> int:
     except Exception:
         proc = None
     last_metric_update = 0.0
+    avail_h = max(20, (console.height - 1) if (os.name == "nt" and console.height) else (console.height or 28))
+    last_w = console.width
+    last_h = avail_h
 
     try:
         with Live(
-            build_cockpit_layout(state, width=console.width, height=console.height),
+            build_cockpit_layout(state, width=last_w, height=last_h),
             console=console,
-            refresh_per_second=4,
+            auto_refresh=False,
             screen=True,
         ) as live:
+            live.refresh()
             while True:
-                # 1. Update real process telemetry every second (calibrated to total host CPU cores)
                 now = time.time()
+                needs_render = False
+
+                # Dynamic window resize detection
+                curr_w = console.width
+                curr_h = max(20, (console.height - 1) if (os.name == "nt" and console.height) else (console.height or 28))
+                if (curr_w != last_w) or (curr_h != last_h):
+                    last_w, last_h = curr_w, curr_h
+                    needs_render = True
+
+                # 1. Update real process telemetry once per second
                 if proc and (now - last_metric_update >= 1.0):
                     try:
                         if not demo_mode:
@@ -578,7 +591,11 @@ def run_cockpit(demo_mode: bool = True) -> int:
                             state.ram_mb = 7.4
                     except Exception:
                         pass
+                    if not state.is_paused and demo_mode:
+                        state.packet_rate = 145 + int(now) % 12
+                        state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
                     last_metric_update = now
+                    needs_render = True
 
                 # 2. Poll non-blocking keyboard input
                 key = kb.read_key()
@@ -592,6 +609,7 @@ def run_cockpit(demo_mode: bool = True) -> int:
                             state.in_search_input = False
                             state.search_query = None
                             state.siem_event = "Search Cancelled"
+                            needs_render = True
                         elif key == "ENTER":
                             state.in_search_input = False
                             if not state.search_query:
@@ -599,23 +617,26 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                 state.siem_event = "Search Cleared"
                             else:
                                 state.siem_event = f"Filter: '{state.search_query}'"
+                            needs_render = True
                         elif key == "BACKSPACE":
                             if state.search_query:
                                 state.search_query = state.search_query[:-1]
                             state.selected_index = 0
                             state.viewport_start = 0
+                            needs_render = True
                         elif len(key) == 1 and key.isprintable():
                             if state.search_query is None:
                                 state.search_query = ""
                             state.search_query += key
                             state.selected_index = 0
                             state.viewport_start = 0
-                        continue
+                            needs_render = True
 
                     # Mode 2: Process Forensic Dossier Modal
-                    if state.show_dossier:
+                    elif state.show_dossier:
                         if key in ("ESC", "\x1b") or key.lower() in ("i", "q"):
                             state.show_dossier = False
+                            needs_render = True
                         elif key.lower() == "k":
                             if visible_flows and 0 <= state.selected_index < total_visible:
                                 target = visible_flows[state.selected_index]
@@ -626,6 +647,7 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                     target.state = "SEVERED (Host Clean)"
                                     state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
                                     state.siem_event = f"EID 9002 (Severed PID {target.pid})"
+                                    needs_render = True
                         elif key.lower() == "c":
                             if visible_flows and 0 <= state.selected_index < total_visible:
                                 target = visible_flows[state.selected_index]
@@ -633,115 +655,130 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                     state.siem_event = f"Copied: {target.process_name}"
                                 else:
                                     state.siem_event = f"Path: {target.binary_path[:24]}"
+                                needs_render = True
                         elif key.lower() == "e":
                             if visible_flows and 0 <= state.selected_index < total_visible:
                                 target = visible_flows[state.selected_index]
                                 fn = export_telemetry_json(state, target_flow=target)
                                 state.siem_event = f"Saved: {fn}"
-                        continue
+                                needs_render = True
 
                     # Mode 3: Cockpit Primary Matrix Navigation
-                    key_lower = key.lower()
-                    if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
-                        break
+                    else:
+                        key_lower = key.lower()
+                        if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
+                            break
 
-                    if key == "ESC":
-                        if state.search_query:
-                            state.search_query = None
-                            state.selected_index = 0
-                            state.viewport_start = 0
-                            state.siem_event = "Filter Cleared"
-                        continue
+                        if key == "ESC":
+                            if state.search_query:
+                                state.search_query = None
+                                state.selected_index = 0
+                                state.viewport_start = 0
+                                state.siem_event = "Filter Cleared"
+                                needs_render = True
+                        else:
+                            has_alert = any(f.is_threat for f in state.flows)
+                            header_size = 3
+                            alert_size = 4 if has_alert else 0
+                            drawer_size = 9 if state.drawer_expanded else 0
+                            footer_size = 2
+                            fixed_overhead = header_size + alert_size + drawer_size + footer_size
 
-                    has_alert = any(f.is_threat for f in state.flows)
-                    header_size = 3
-                    alert_size = 4 if has_alert else 0
-                    drawer_size = 9 if state.drawer_expanded else 0
-                    footer_size = 2
-                    fixed_overhead = header_size + alert_size + drawer_size + footer_size
+                            term_h = last_h
+                            table_size = max(6, term_h - fixed_overhead)
+                            v_size = max(2, table_size - 4)
 
-                    term_h = console.height if (console.height and console.height >= 20) else 28
-                    table_size = max(6, term_h - fixed_overhead)
-                    v_size = max(2, table_size - 4)
+                            if key == "UP":
+                                if state.selected_index > 0:
+                                    state.selected_index -= 1
+                                    if state.selected_index < state.viewport_start:
+                                        state.viewport_start = state.selected_index
+                                    needs_render = True
+                            elif key == "DOWN":
+                                if state.selected_index < total_visible - 1:
+                                    state.selected_index += 1
+                                    if state.selected_index >= state.viewport_start + v_size:
+                                        state.viewport_start = state.selected_index - v_size + 1
+                                    needs_render = True
+                            elif key == "PAGE_UP":
+                                state.selected_index = max(0, state.selected_index - v_size)
+                                state.viewport_start = max(0, state.viewport_start - v_size)
+                                needs_render = True
+                            elif key == "PAGE_DOWN":
+                                if total_visible > 0:
+                                    state.selected_index = min(total_visible - 1, state.selected_index + v_size)
+                                    if state.selected_index >= state.viewport_start + v_size:
+                                        state.viewport_start = min(max(0, total_visible - v_size), state.viewport_start + v_size)
+                                    needs_render = True
+                            elif key == "HOME":
+                                state.selected_index = 0
+                                state.viewport_start = 0
+                                needs_render = True
+                            elif key == "END":
+                                if total_visible > 0:
+                                    state.selected_index = total_visible - 1
+                                    state.viewport_start = max(0, total_visible - v_size)
+                                    needs_render = True
+                            elif key in ("ENTER", "\r", "\n") or key_lower == "d":  # Toggle drawer
+                                state.drawer_expanded = not state.drawer_expanded
+                                needs_render = True
+                            elif key_lower == "i":  # Open Process Forensic Dossier
+                                state.show_dossier = True
+                                needs_render = True
+                            elif key == "/":  # Interactive Search
+                                state.in_search_input = True
+                                state.search_query = ""
+                                state.selected_index = 0
+                                state.viewport_start = 0
+                                state.siem_event = "Search: Type query and press ENTER"
+                                needs_render = True
+                            elif key_lower == "s":  # Cycle Sort Order
+                                sort_options = ["threat", "interval", "payload", "pid", "process"]
+                                cur_idx = sort_options.index(state.sort_field) if state.sort_field in sort_options else 0
+                                state.sort_field = sort_options[(cur_idx + 1) % len(sort_options)]
+                                state.selected_index = 0
+                                state.viewport_start = 0
+                                state.siem_event = f"Sort: {state.sort_field.upper()}"
+                                needs_render = True
+                            elif key == " ":  # Pause/Resume
+                                state.is_paused = not state.is_paused
+                                state.siem_event = "Telemetry Paused" if state.is_paused else "Telemetry Resumed"
+                                needs_render = True
+                            elif key_lower == "f":  # Filter Threats Only
+                                state.filter_threats_only = not state.filter_threats_only
+                                state.selected_index = 0
+                                state.viewport_start = 0
+                                state.siem_event = "Filter: Threats Only" if state.filter_threats_only else "Filter: All Flows"
+                                needs_render = True
+                            elif key_lower == "k":  # Kill socket simulation
+                                if visible_flows and 0 <= state.selected_index < total_visible:
+                                    target = visible_flows[state.selected_index]
+                                    if target.is_threat:
+                                        target.is_severed = True
+                                        target.threat_score = 0.0
+                                        target.threat_label = "SAFE"
+                                        target.state = "SEVERED (Host Clean)"
+                                        state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
+                                        state.siem_event = f"EID 9002 (Severed PID {target.pid})"
+                                        needs_render = True
+                            elif key_lower == "c":  # Copy binary path
+                                if visible_flows and 0 <= state.selected_index < total_visible:
+                                    target = visible_flows[state.selected_index]
+                                    if copy_to_clipboard(target.binary_path):
+                                        state.siem_event = f"Copied: {target.process_name}"
+                                    else:
+                                        state.siem_event = f"Path: {target.binary_path[:24]}"
+                                    needs_render = True
+                            elif key_lower == "e":  # Export telemetry JSON
+                                fn = export_telemetry_json(state)
+                                state.siem_event = f"Saved: {fn}"
+                                needs_render = True
 
-                    if key == "UP":
-                        if state.selected_index > 0:
-                            state.selected_index -= 1
-                            if state.selected_index < state.viewport_start:
-                                state.viewport_start = state.selected_index
-                    elif key == "DOWN":
-                        if state.selected_index < total_visible - 1:
-                            state.selected_index += 1
-                            if state.selected_index >= state.viewport_start + v_size:
-                                state.viewport_start = state.selected_index - v_size + 1
-                    elif key == "PAGE_UP":
-                        state.selected_index = max(0, state.selected_index - v_size)
-                        state.viewport_start = max(0, state.viewport_start - v_size)
-                    elif key == "PAGE_DOWN":
-                        if total_visible > 0:
-                            state.selected_index = min(total_visible - 1, state.selected_index + v_size)
-                            if state.selected_index >= state.viewport_start + v_size:
-                                state.viewport_start = min(max(0, total_visible - v_size), state.viewport_start + v_size)
-                    elif key == "HOME":
-                        state.selected_index = 0
-                        state.viewport_start = 0
-                    elif key == "END":
-                        if total_visible > 0:
-                            state.selected_index = total_visible - 1
-                            state.viewport_start = max(0, total_visible - v_size)
-                    elif key in ("ENTER", "\r", "\n") or key_lower == "d":  # Toggle drawer
-                        state.drawer_expanded = not state.drawer_expanded
-                    elif key_lower == "i":  # Open Process Forensic Dossier
-                        state.show_dossier = True
-                    elif key == "/":  # Interactive Search
-                        state.in_search_input = True
-                        state.search_query = ""
-                        state.selected_index = 0
-                        state.viewport_start = 0
-                        state.siem_event = "Search: Type query and press ENTER"
-                    elif key_lower == "s":  # Cycle Sort Order
-                        sort_options = ["threat", "interval", "payload", "pid", "process"]
-                        cur_idx = sort_options.index(state.sort_field) if state.sort_field in sort_options else 0
-                        state.sort_field = sort_options[(cur_idx + 1) % len(sort_options)]
-                        state.selected_index = 0
-                        state.viewport_start = 0
-                        state.siem_event = f"Sort: {state.sort_field.upper()}"
-                    elif key == " ":  # Pause/Resume
-                        state.is_paused = not state.is_paused
-                        state.siem_event = "Telemetry Paused" if state.is_paused else "Telemetry Resumed"
-                    elif key_lower == "f":  # Filter Threats Only
-                        state.filter_threats_only = not state.filter_threats_only
-                        state.selected_index = 0
-                        state.viewport_start = 0
-                        state.siem_event = "Filter: Threats Only" if state.filter_threats_only else "Filter: All Flows"
-                    elif key_lower == "k":  # Kill socket simulation
-                        if visible_flows and 0 <= state.selected_index < total_visible:
-                            target = visible_flows[state.selected_index]
-                            if target.is_threat:
-                                target.is_severed = True
-                                target.threat_score = 0.0
-                                target.threat_label = "SAFE"
-                                target.state = "SEVERED (Host Clean)"
-                                state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
-                                state.siem_event = f"EID 9002 (Severed PID {target.pid})"
-                    elif key_lower == "c":  # Copy binary path
-                        if visible_flows and 0 <= state.selected_index < total_visible:
-                            target = visible_flows[state.selected_index]
-                            if copy_to_clipboard(target.binary_path):
-                                state.siem_event = f"Copied: {target.process_name}"
-                            else:
-                                state.siem_event = f"Path: {target.binary_path[:24]}"
-                    elif key_lower == "e":  # Export telemetry JSON
-                        fn = export_telemetry_json(state)
-                        state.siem_event = f"Saved: {fn}"
+                # 3. Only repaint when state changed or telemetry ticked
+                if needs_render:
+                    live.update(build_cockpit_layout(state, width=last_w, height=last_h), refresh=True)
 
-                # 3. Dynamic active beacon calculation & packet rates
-                if not state.is_paused and demo_mode:
-                    state.packet_rate = 145 + int(time.time() * 2) % 12
-                    state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
-
-                live.update(build_cockpit_layout(state, width=console.width, height=console.height))
-                time.sleep(0.05)
+                time.sleep(0.02)
 
     except KeyboardInterrupt:
         pass
