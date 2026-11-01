@@ -78,14 +78,12 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     inner_w = max(80, width - 4)
 
     l = Text()
-    l.append(f"{state.app_name} ", style="bold #10b981")
-    l.append(f"{state.version}", style="bold #10b981")
+    l.append(f"{state.app_name}", style="bold #10b981")
     l.append(" │ ", style="#334155")
     l.append("HOST: ", style="#64748b")
     if inner_w >= 148:
-        l.append("WIN-PROD-SRV01", style="bold white")
-        l.append(" (X64)", style="#94a3b8")
-    elif inner_w >= 134:
+        l.append("WIN-PROD-SRV01 (X64)", style="bold white")
+    elif inner_w >= 126:
         l.append("WIN-PROD-SRV01", style="bold white")
     else:
         l.append("WIN-PROD", style="bold white")
@@ -96,7 +94,7 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     bpf_display = "tcp and (port 443 or 8443)"
     l.append(f"{bpf_display}", style="bold white")
     l.append(" │ ", style="#334155")
-    if inner_w >= 144:
+    if inner_w >= 138:
         l.append("SOCKETS: ", style="#64748b")
     else:
         l.append("SOCKS: ", style="#64748b")
@@ -107,16 +105,16 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     r.append(f"{state.cpu_percent:.1f}%", style="bold #10b981")
     r.append(" │ ", style="#334155")
     r.append("RAM: ", style="#64748b")
-    ram_str = f"{state.ram_mb:.1f} MB" if inner_w >= 134 else f"{state.ram_mb:.1f}M"
+    ram_str = f"{state.ram_mb:.1f} MB" if inner_w >= 130 else f"{state.ram_mb:.1f}M"
     r.append(ram_str, style="bold #10b981")
     r.append(" │ ", style="#334155")
     if state.is_paused:
         r.append("● PAUSED", style="bold #f59e0b")
     else:
-        active_str = "● ACTIVE (2s)" if inner_w >= 144 else "● ACTIVE"
+        active_str = "● ACTIVE (2s)" if inner_w >= 138 else "● ACTIVE"
         r.append(active_str, style="bold #10b981")
     r.append(" │ ", style="#334155")
-    siem_prefix = "SIEM: " if inner_w >= 138 else ""
+    siem_prefix = "SIEM: " if inner_w >= 132 else ""
     r.append(f"{siem_prefix}{state.siem_event}", style="bold #10b981")
 
     l_len = len(l.plain)
@@ -176,7 +174,7 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Op
         action_str = "ACTION: MIB_TCP_STATE_DELETE_TCB -> Socket Severed" if inner_w >= 140 else "ACTION: SetTcpEntry -> Severed"
         eid_str = "EID 9002 Dispatched"
     else:
-        action_str = "ACTION: SetTcpEntry Armed -> Press [K] to Sever" if inner_w >= 140 else "ACTION: Armed for [K]"
+        action_str = "ACTION: Target Armed │ Select Row & Press [K]" if inner_w >= 140 else "ACTION: Target Armed"
         eid_str = "EID 9001 Dispatched"
 
     r2.append(action_str, style="bold #38bdf8")
@@ -328,17 +326,23 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
 
             # Interval & Cadence
             c_int = Text()
-            int_style = "bold #f59e0b" if is_threat else ("white" if is_selected else "#94a3b8")
-            c_int.append(f"{flow.interval_str} ", style=int_style)
-            spark_style = "bold #ef4444" if is_threat else "#10b981"
-            c_int.append(flow.sparkline, style=spark_style)
+            if flow.is_severed:
+                c_int.append("Inactive ", style="#64748b")
+                c_int.append("(TCB Kill)", style="#38bdf8")
+            else:
+                int_style = "bold #f59e0b" if is_threat else ("white" if is_selected else "#94a3b8")
+                c_int.append(f"{flow.interval_str} ", style=int_style)
+                spark_style = "bold #ef4444" if is_threat else "#10b981"
+                c_int.append(flow.sparkline, style=spark_style)
 
             # Payload
             c_pay = Text(flow.payload_str, style="white" if is_selected else "#94a3b8")
 
             # Threat Score Badge - Uniform alignment across all tiers
             c_thr = Text()
-            if flow.threat_score >= 0.90:
+            if flow.is_severed:
+                c_thr.append("  SEVERED    ", style="bold #38bdf8 on #0f172a")
+            elif flow.threat_score >= 0.90:
                 c_thr.append(f" {flow.threat_score * 100:.1f}% CRIT ", style="bold white on #dc2626")
             elif flow.threat_score >= 0.80:
                 c_thr.append(f" {flow.threat_score * 100:.1f}% HIGH ", style="bold white on #b91c1c")
@@ -348,7 +352,9 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
                 c_thr.append(f"  {flow.threat_score * 100:.1f}% SAFE ", style="bold #10b981")
 
             # Row background style
-            if is_threat:
+            if flow.is_severed:
+                row_bg = "on #131e33" if is_selected else None
+            elif is_threat:
                 row_bg = "on #2d0c0c" if is_selected else "on #1a0808"
             else:
                 row_bg = "on #131e33" if is_selected else None
@@ -395,17 +401,17 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c1.append("• PID       : ", style="#64748b")
     c1.append(f"{selected_flow.pid}\n", style="bold white")
     c1.append("• Process   : ", style="#64748b")
-    proc_style = "bold #ef4444" if selected_flow.is_threat else "bold white"
+    proc_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else ("bold #38bdf8" if selected_flow.is_severed else "bold white")
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
     c1.append("• Path      : ", style="#64748b")
     path_display = selected_flow.binary_path
     if len(path_display) > 28:
         if "WindowsPowerShell" in path_display:
-            path_display = r"C:\...\powershell.exe"
+            path_display = r"C:\Windows\...\powershell.exe"
         elif "WindowsApps" in path_display:
-            path_display = r"C:\...\teams.exe"
+            path_display = r"C:\Program Files\...\teams.exe"
         elif "AppData" in path_display:
-            path_display = r"C:\...\update.exe"
+            path_display = r"C:\Users\...\update.exe"
         else:
             path_display = path_display[:12] + "..." + path_display[-12:]
     c1.append(f"{path_display}\n", style="#cbd5e1")
@@ -416,7 +422,10 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     else:
         c1.append("Unsigned PE (In-Memory)\n", style="bold #ef4444")
     c1.append("• JA4       : ", style="#64748b")
-    c1.append(f"{selected_flow.ja4_fingerprint[:18]}...\n", style="#94a3b8")
+    ja4_disp = selected_flow.ja4_fingerprint
+    if len(ja4_disp) > 22:
+        ja4_disp = ja4_disp[:10] + "_" + ja4_disp[11:15] + "..."
+    c1.append(f"{ja4_disp}\n", style="#94a3b8")
     c1.append("• User      : ", style="#64748b")
     c1.append(f"{selected_flow.user_context[:24]}", style="#cbd5e1")
 
@@ -432,12 +441,15 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     # Card 2: Cadence & Timing (Amber title [ CADENCE & TIMING ])
     c2 = Text()
     c2.append("• Interval  : ", style="#64748b")
-    int_style = "bold #f59e0b" if selected_flow.is_threat else "bold white"
-    c2.append(f"{selected_flow.interval_str} ", style=int_style)
-    c2.append(f"({selected_flow.jitter_str})\n", style="#64748b")
+    if selected_flow.is_severed:
+        c2.append("Inactive (TCB Killed)\n", style="bold #38bdf8")
+    else:
+        int_style = "bold #f59e0b" if selected_flow.is_threat else "bold white"
+        c2.append(f"{selected_flow.interval_str} ", style=int_style)
+        c2.append(f"({selected_flow.jitter_str})\n", style="#64748b")
     c2.append("• Heartbeat : ", style="#64748b")
     if selected_flow.is_severed:
-        hb_style = "bold #10b981"
+        hb_style = "bold #38bdf8"
         hb_text = "SEVERED (Stack Killed)"
     elif selected_flow.is_threat:
         hb_style = "bold #ef4444"
@@ -447,18 +459,21 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         hb_text = "RANDOM (Human Flow)"
     c2.append(f"{hb_text}\n", style=hb_style)
     c2.append("• Pulse     : ", style="#64748b")
-    spark_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
-    c2.append(f"{selected_flow.sparkline} ", style=spark_style)
-    c2.append("(Rigid)\n" if selected_flow.is_threat else "(Normal)\n", style="#64748b")
+    if selected_flow.is_severed:
+        c2.append("──  ──  ── (Terminated)\n", style="#64748b")
+    else:
+        spark_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
+        c2.append(f"{selected_flow.sparkline} ", style=spark_style)
+        c2.append("(Rigid)\n" if selected_flow.is_threat else "(Normal)\n", style="#64748b")
     c2.append("• Payload   : ", style="#64748b")
     c2.append(f"{selected_flow.payload_str} ", style="bold white")
     c2.append(f"({'Fixed' if selected_flow.is_threat else 'Dynamic'})\n", style="#64748b")
     c2.append("• Signals   : ", style="#64748b")
-    c2.append(f"{selected_flow.heuristic_signals[:26]}\n", style="#cbd5e1")
+    c2.append(f"{selected_flow.heuristic_signals}\n", style="#cbd5e1")
     c2.append("• Jitter    : ", style="#64748b")
-    jitter_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
+    jitter_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else "#10b981"
     c2.append(f"{selected_flow.jitter_pct} ", style=jitter_style)
-    c2.append("(Anomalous)" if selected_flow.is_threat else "(Normal)", style="#64748b")
+    c2.append("(Anomalous)" if selected_flow.is_threat and not selected_flow.is_severed else "(Normal)", style="#64748b")
 
     p2 = Panel(
         c2,
@@ -564,10 +579,10 @@ def render_footer(state: CockpitState) -> RenderableType:
     pause_label = "Pause  " if not state.is_paused else "Resume "
     fl.append(pause_label, style="#94a3b8")
     fl.append(" F ", style="bold white on #1e293b")
-    filter_label = "Threats  " if not state.filter_threats_only else "All  "
+    filter_label = "Filter  " if not state.filter_threats_only else "All  "
     fl.append(filter_label, style="#94a3b8")
     fl.append(" E ", style="bold white on #1e293b")
-    fl.append("PCAP", style="#94a3b8")
+    fl.append("Export", style="#94a3b8")
 
     fr = Text()
     fr.append("│  ", style="#334155")
