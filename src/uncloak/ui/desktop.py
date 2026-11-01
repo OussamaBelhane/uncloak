@@ -1240,6 +1240,14 @@ def launch_desktop(port: Optional[int] = None) -> int:
             except Exception:
                 continue
 
+        if not app_launched:
+            try:
+                subprocess.Popen(f'cmd.exe /c start msedge --app="{url}" --window-size=1420,870 --new-window', shell=True)
+                print("[+] Launched Microsoft Edge WebView2 via Windows Shell")
+                app_launched = True
+            except Exception:
+                pass
+
     elif system == "Linux":
         # Check for chromium/chrome --app mode or xdg-open
         for browser in ("google-chrome", "chromium-browser", "chromium", "brave-browser", "edge"):

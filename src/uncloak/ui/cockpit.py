@@ -791,4 +791,10 @@ def run_cockpit(demo_mode: bool = True) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(run_cockpit(demo_mode=True))
+    if "--cli" in sys.argv:
+        sys.exit(run_cockpit(demo_mode=True))
+    elif sys.platform == "win32":
+        from uncloak.ui.desktop import launch_desktop
+        sys.exit(launch_desktop())
+    else:
+        sys.exit(run_cockpit(demo_mode=True))
