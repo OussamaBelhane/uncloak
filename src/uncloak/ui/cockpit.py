@@ -293,7 +293,7 @@ def run_cockpit(demo_mode: bool = True) -> int:
     kb = NonBlockingKeyboard()
 
     try:
-        with Live(build_cockpit_layout(state, width=console.width), console=console, refresh_per_second=2, screen=True) as live:
+        with Live(build_cockpit_layout(state, width=console.width, height=console.height), console=console, refresh_per_second=2, screen=True) as live:
             while True:
                 # Poll non-blocking keyboard input
                 key = kb.read_key()
@@ -305,7 +305,13 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
                     total_visible = len(visible_flows)
                     has_alert = any(f.is_threat for f in state.flows)
-                    v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
+                    fixed_overhead = 3 + (4 if has_alert else 0) + 3
+                    avail = console.height - fixed_overhead
+                    if state.drawer_expanded:
+                        table_size = max(7, min(11, avail - 11))
+                    else:
+                        table_size = max(11, avail)
+                    v_size = max(2, table_size - 5)
 
                     if key == "UP":
                         if state.selected_index > 0:
@@ -337,7 +343,7 @@ def run_cockpit(demo_mode: bool = True) -> int:
                 if not state.is_paused and demo_mode:
                     state.packet_rate = 145 + int(time.time() * 2) % 12
 
-                live.update(build_cockpit_layout(state, width=console.width))
+                live.update(build_cockpit_layout(state, width=console.width, height=console.height))
                 time.sleep(0.05)
 
     finally:

@@ -77,20 +77,20 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     l.append(f"{state.version}", style="bold #10b981")
     l.append(" │ ", style="#334155")
     l.append("HOST: ", style="#64748b")
-    if inner_w >= 148:
+    if inner_w >= 142:
         l.append("WIN-PROD-SRV01", style="bold white")
         l.append(" (X64)", style="#94a3b8")
-    elif inner_w >= 126:
+    elif inner_w >= 134:
         l.append("WIN-PROD", style="bold white")
         l.append(" (X64)", style="#94a3b8")
     else:
         l.append("WIN-PROD", style="bold white")
     l.append(" │ ", style="#334155")
     l.append("BPF: ", style="#64748b")
-    bpf_display = state.bpf_filter if inner_w >= 126 else "443,8443"
+    bpf_display = state.bpf_filter if inner_w >= 134 else "443,8443"
     l.append(f"{bpf_display}", style="bold white")
     l.append(" │ ", style="#334155")
-    sock_label = "TOTAL SOCKETS: " if inner_w >= 148 else "SOCKETS: "
+    sock_label = "TOTAL SOCKETS: " if inner_w >= 142 else "SOCKETS: "
     l.append(sock_label, style="#64748b")
     l.append(f"{state.total_sockets}", style="bold #06b6d4")
 
@@ -101,12 +101,13 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     r.append("RAM: ", style="#64748b")
     r.append(f"{state.ram_mb:.1f} MB", style="bold #10b981")
     r.append(" │ ", style="#334155")
+    active_str = "● ACTIVE (2s)" if inner_w >= 134 else "● ACTIVE"
     if state.is_paused:
         r.append("● PAUSED", style="bold #f59e0b")
     else:
-        r.append("● ACTIVE (2s)", style="bold #10b981")
+        r.append(active_str, style="bold #10b981")
     r.append(" │ ", style="#334155")
-    siem_prefix = "SIEM: " if inner_w >= 120 else ""
+    siem_prefix = "SIEM: " if inner_w >= 115 else ""
     r.append(f"{siem_prefix}{state.siem_event}", style="bold #10b981")
 
     l_len = len(l.plain)
@@ -188,7 +189,7 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Op
     )
 
 
-def render_table(state: CockpitState, width: int = 120) -> RenderableType:
+def render_table(state: CockpitState, width: int = 120, table_height: Optional[int] = None) -> RenderableType:
     """Renders the full-width 7-column primary telemetry matrix matching HTML."""
     visible_flows = state.flows
     if state.filter_threats_only:
@@ -196,7 +197,10 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
 
     total = len(visible_flows)
     has_alert = any(f.is_threat for f in state.flows)
-    v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
+    if table_height is not None:
+        v_size = max(2, table_height - 5)
+    else:
+        v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
     start = max(0, min(state.viewport_start, max(0, total - v_size)))
     end = min(total, start + v_size)
     slice_flows = visible_flows[start:end]
@@ -332,7 +336,7 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
     )
 
 
-def render_bottom_drawer(selected_flow: Optional[FlowEntry]) -> RenderableType:
+def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -> RenderableType:
     """Renders the 3-block horizontal forensic attribution drawer strictly matching HTML."""
     if not selected_flow:
         return Panel(Text("No session selected for inspection", style="dim center"), border_style="#1e293b")
@@ -411,7 +415,10 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry]) -> RenderableType:
     # Card 3: Forensic & MITRE
     c3 = Text()
     c3.append("• MITRE     : ", style="#64748b")
-    c3.append(f"{selected_flow.mitre_technique}\n", style="bold white")
+    mitre_val = selected_flow.mitre_technique
+    if width < 140 and len(mitre_val) > 22:
+        mitre_val = mitre_val.replace(" C2)", ")").replace(" (PowerShell)", " (PS)")
+    c3.append(f"{mitre_val}\n", style="bold white")
     c3.append("• API       : ", style="#64748b")
     c3.append("SetTcpEntry\n", style="bold #06b6d4")
     c3.append("• Action    : ", style="#64748b")
@@ -493,27 +500,41 @@ def render_footer(state: CockpitState) -> RenderableType:
     )
 
 
-def build_cockpit_layout(state: CockpitState, width: int = 120) -> Layout:
+def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional[int] = None) -> Layout:
     """Assembles the complete master layout for the terminal."""
     root = Layout(name="root")
     
     top_threat = state.flows[0] if (state.flows and state.flows[0].is_threat) else next((f for f in state.flows if f.is_threat), None)
     pinned_alert = render_pinned_alert(top_threat, width=width)
 
+    header_size = 3
+    alert_size = 4 if pinned_alert else 0
+    footer_size = 3
+    fixed_overhead = header_size + alert_size + footer_size
+
+    # Responsive vertical budgeting ensuring footer is never clipped
+    term_height = height if (height and height > 18) else 34
+    avail = term_height - fixed_overhead
+
+    if state.drawer_expanded:
+        drawer_size = 11
+        table_size = max(7, min(11, avail - drawer_size))
+    else:
+        table_size = max(11, avail)
+
     sections = [
-        Layout(name="header", size=3),
+        Layout(name="header", size=header_size),
     ]
 
     if pinned_alert:
-        sections.append(Layout(name="alert", size=4))
+        sections.append(Layout(name="alert", size=alert_size))
 
-    table_size = 11 if state.drawer_expanded else (17 if pinned_alert else 21)
     sections.append(Layout(name="main_table", size=table_size))
 
     if state.drawer_expanded:
-        sections.append(Layout(name="drawer", size=11))
+        sections.append(Layout(name="drawer", size=drawer_size))
 
-    sections.append(Layout(name="footer", size=3))
+    sections.append(Layout(name="footer", size=footer_size))
 
     root.split_column(*sections)
 
@@ -521,14 +542,14 @@ def build_cockpit_layout(state: CockpitState, width: int = 120) -> Layout:
         root["alert"].update(pinned_alert)
 
     root["header"].update(render_header(state, width=width))
-    root["main_table"].update(render_table(state, width=width))
+    root["main_table"].update(render_table(state, width=width, table_height=table_size))
     
     if state.drawer_expanded:
         selected_flow = None
         visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
         if visible_flows and 0 <= state.selected_index < len(visible_flows):
             selected_flow = visible_flows[state.selected_index]
-        root["drawer"].update(render_bottom_drawer(selected_flow))
+        root["drawer"].update(render_bottom_drawer(selected_flow, width=width))
         
     root["footer"].update(render_footer(state))
     return root
