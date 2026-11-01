@@ -64,6 +64,8 @@ class CockpitState:
     is_paused: bool = False
     filter_threats_only: bool = False
     search_query: Optional[str] = None
+    in_search_input: bool = False
+    sort_field: str = "threat"  # "threat", "interval", "payload", "pid", "process"
     app_name: str = "UNCLOAK"
     version: str = "v1.0.0"
     host_name: str = "WIN-PROD-SRV01 (X64)"
@@ -74,6 +76,59 @@ class CockpitState:
     cpu_percent: float = 0.8
     ram_mb: float = 7.5
     siem_event: str = "EID 9002"
+
+
+def get_visible_flows(state: CockpitState) -> list[FlowEntry]:
+    """Filters and sorts active flows based on CockpitState settings."""
+    flows = list(state.flows)
+
+    # 1. Threat filter
+    if state.filter_threats_only:
+        flows = [f for f in flows if f.is_threat]
+
+    # 2. Search query filter
+    if state.search_query:
+        q = state.search_query.strip().lower()
+        if q:
+            flows = [
+                f for f in flows
+                if q in f.process_name.lower()
+                or q in f.dst_ip.lower()
+                or q in f.sni.lower()
+                or q in str(f.pid)
+                or (f.c2_framework and q in f.c2_framework.lower())
+                or q in f.mitre_technique.lower()
+            ]
+
+    # 3. Sorting
+    sort_field = getattr(state, "sort_field", "threat").lower()
+    if sort_field == "threat":
+        # Highest threat score first, severed at bottom
+        flows.sort(key=lambda f: (f.is_severed, -f.threat_score))
+    elif sort_field == "interval":
+        # Ascending interval duration for periodic beacons first, irregular/inactive last
+        def _interval_val(f: FlowEntry) -> tuple[int, float]:
+            if f.is_severed:
+                return (2, 9999.0)
+            if f.interval_str.lower() in ("irregular", "inactive"):
+                return (1, 9999.0)
+            try:
+                num = float(f.interval_str.replace("s", "").strip())
+                return (0, num)
+            except ValueError:
+                return (1, 9999.0)
+        flows.sort(key=_interval_val)
+    elif sort_field == "payload":
+        # Descending bytes transferred
+        flows.sort(key=lambda f: -f.bytes_transferred)
+    elif sort_field == "pid":
+        # Ascending PID
+        flows.sort(key=lambda f: f.pid)
+    elif sort_field == "process":
+        # Alphabetical by process name
+        flows.sort(key=lambda f: f.process_name.lower())
+
+    return flows
 
 
 def render_header(state: CockpitState, width: int = 120) -> RenderableType:
@@ -207,9 +262,7 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Op
 
 def render_table(state: CockpitState, width: int = 120, table_height: Optional[int] = None) -> RenderableType:
     """Renders the full-width 7-column primary telemetry matrix strictly matching reference."""
-    visible_flows = state.flows
-    if state.filter_threats_only:
-        visible_flows = [f for f in state.flows if f.is_threat]
+    visible_flows = get_visible_flows(state)
 
     total = len(visible_flows)
     has_alert = any(f.is_threat for f in state.flows)
@@ -233,10 +286,15 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     sh_left.append(f"ACTIVE FLOWS ({state.total_sockets})", style="bold white")
     if state.filter_threats_only:
         sh_left.append(" [FILTERED: Threats Only]", style="bold #f59e0b")
+    if state.in_search_input:
+        sh_left.append(f" [SEARCH: {state.search_query or ''}█]", style="bold #06b6d4")
+    elif state.search_query:
+        sh_left.append(f" [FILTER: '{state.search_query}']", style="bold #06b6d4")
 
     sh_right = Text()
     curr_pos = min(total, state.selected_index + 1) if total > 0 else 0
-    sh_right.append(f"[ {curr_pos}/{state.total_sockets} ]", style="bold #06b6d4")
+    total_display = total if (state.filter_threats_only or state.search_query) else state.total_sockets
+    sh_right.append(f"[ {curr_pos}/{total_display} ]", style="bold #06b6d4")
     sh_right.append(" │ ", style="#334155")
     sh_right.append("Scroll: ", style="#64748b")
 
@@ -264,6 +322,15 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
 
     sh.add_row(sh_left, sh_right)
 
+    # Dynamic Column Headers matching active sort field
+    hdr_pid = "PID ▲" if state.sort_field == "pid" else "PID"
+    hdr_proc = "PROCESS ▲" if state.sort_field == "process" else "PROCESS"
+    hdr_dst = "DESTINATION"
+    hdr_sni = "SNI / DOMAIN"
+    hdr_int = "INTERVAL ▲" if state.sort_field == "interval" else "INTERVAL"
+    hdr_pay = "PAYLOAD ▼" if state.sort_field == "payload" else "PAYLOAD"
+    hdr_thr = "THREAT ▼" if state.sort_field == "threat" else "THREAT"
+
     # 7-Column Table - Proportional responsive column spacing strictly matching reference
     table = Table(
         box=None,
@@ -273,29 +340,29 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
         header_style="bold #94a3b8 on #090e1c",
     )
     if width >= 150:
-        table.add_column("PID", width=10, no_wrap=True)
-        table.add_column("PROCESS", width=24, no_wrap=True)
-        table.add_column("DESTINATION", width=28, no_wrap=True)
-        table.add_column("SNI / DOMAIN", width=34, no_wrap=True)
-        table.add_column("INTERVAL", width=26, no_wrap=True)
-        table.add_column("PAYLOAD", width=12, justify="right", no_wrap=True)
-        table.add_column("THREAT ▼", width=16, justify="right", no_wrap=True)
+        table.add_column(hdr_pid, width=10, no_wrap=True)
+        table.add_column(hdr_proc, width=24, no_wrap=True)
+        table.add_column(hdr_dst, width=28, no_wrap=True)
+        table.add_column(hdr_sni, width=34, no_wrap=True)
+        table.add_column(hdr_int, width=26, no_wrap=True)
+        table.add_column(hdr_pay, width=12, justify="right", no_wrap=True)
+        table.add_column(hdr_thr, width=16, justify="right", no_wrap=True)
     elif width >= 135:
-        table.add_column("PID", width=9, no_wrap=True)
-        table.add_column("PROCESS", width=21, no_wrap=True)
-        table.add_column("DESTINATION", width=25, no_wrap=True)
-        table.add_column("SNI / DOMAIN", width=30, no_wrap=True)
-        table.add_column("INTERVAL", width=24, no_wrap=True)
-        table.add_column("PAYLOAD", width=11, justify="right", no_wrap=True)
-        table.add_column("THREAT ▼", width=15, justify="right", no_wrap=True)
+        table.add_column(hdr_pid, width=9, no_wrap=True)
+        table.add_column(hdr_proc, width=21, no_wrap=True)
+        table.add_column(hdr_dst, width=25, no_wrap=True)
+        table.add_column(hdr_sni, width=30, no_wrap=True)
+        table.add_column(hdr_int, width=24, no_wrap=True)
+        table.add_column(hdr_pay, width=11, justify="right", no_wrap=True)
+        table.add_column(hdr_thr, width=15, justify="right", no_wrap=True)
     else:
-        table.add_column("PID", width=8, no_wrap=True)
-        table.add_column("PROCESS", width=18, no_wrap=True)
-        table.add_column("DESTINATION", width=22, no_wrap=True)
-        table.add_column("SNI / DOMAIN", width=25, no_wrap=True)
-        table.add_column("INTERVAL", width=19, no_wrap=True)
-        table.add_column("PAYLOAD", width=9, justify="right", no_wrap=True)
-        table.add_column("THREAT ▼", width=15, justify="right", no_wrap=True)
+        table.add_column(hdr_pid, width=8, no_wrap=True)
+        table.add_column(hdr_proc, width=18, no_wrap=True)
+        table.add_column(hdr_dst, width=22, no_wrap=True)
+        table.add_column(hdr_sni, width=25, no_wrap=True)
+        table.add_column(hdr_int, width=19, no_wrap=True)
+        table.add_column(hdr_pay, width=9, justify="right", no_wrap=True)
+        table.add_column(hdr_thr, width=15, justify="right", no_wrap=True)
 
     if not slice_flows:
         table.add_row("", "", "No active network sessions matching criteria", "", "", "", "")
@@ -685,7 +752,14 @@ def render_footer(state: CockpitState) -> RenderableType:
     footer_grid.add_column(justify="right", no_wrap=True)
 
     fl = Text()
-    if state.show_dossier:
+    if state.in_search_input:
+        fl.append(" ENTER ", style="bold #06b6d4 on #1e293b")
+        fl.append("Apply Filter  ", style="#94a3b8")
+        fl.append(" ESC ", style="bold white on #1e293b")
+        fl.append("Cancel  ", style="#94a3b8")
+        fl.append(" BACKSPACE ", style="bold white on #1e293b")
+        fl.append("Delete Char", style="#94a3b8")
+    elif state.show_dossier:
         fl.append(" ESC / I ", style="bold white on #1e293b")
         fl.append("Close Dossier  ", style="#94a3b8")
         fl.append(" K ", style="bold #ef4444 on #1e293b")
@@ -704,7 +778,7 @@ def render_footer(state: CockpitState) -> RenderableType:
         fl.append(" / ", style="bold #06b6d4 on #1e293b")
         fl.append("Search  ", style="#94a3b8")
         fl.append(" S ", style="bold #f59e0b on #1e293b")
-        fl.append("Sort  ", style="#94a3b8")
+        fl.append(f"Sort ({state.sort_field[:3].upper()})  ", style="#94a3b8")
         fl.append(" K ", style="bold #ef4444 on #1e293b")
         fl.append("Sever  ", style="#94a3b8")
         fl.append(" SPACE ", style="bold white on #1e293b")
@@ -736,7 +810,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
     # Tier 3: Process Forensic Dossier Mode
     if state.show_dossier:
         selected_flow = None
-        visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
+        visible_flows = get_visible_flows(state)
         if visible_flows and 0 <= state.selected_index < len(visible_flows):
             selected_flow = visible_flows[state.selected_index]
         
@@ -785,7 +859,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
 
     if state.drawer_expanded:
         selected_flow = None
-        visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
+        visible_flows = get_visible_flows(state)
         if visible_flows and 0 <= state.selected_index < len(visible_flows):
             selected_flow = visible_flows[state.selected_index]
         root["drawer"].update(render_bottom_drawer(selected_flow, width=width))

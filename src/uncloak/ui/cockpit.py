@@ -13,7 +13,7 @@ import psutil
 from rich.console import Console
 from rich.live import Live
 
-from uncloak.ui.layout import CockpitState, FlowEntry, build_cockpit_layout
+from uncloak.ui.layout import CockpitState, FlowEntry, build_cockpit_layout, get_visible_flows
 
 
 def get_demo_flows() -> list[FlowEntry]:
@@ -321,6 +321,80 @@ def copy_to_clipboard(text: str) -> bool:
         return False
 
 
+def export_telemetry_json(state: CockpitState, target_flow: Optional[FlowEntry] = None) -> str:
+    """Exports structured telemetry or single flow dossier to a genuine JSON file."""
+    import json
+    from pathlib import Path
+
+    if target_flow:
+        filename = f"uncloak_dossier_{target_flow.pid}.json"
+        data = {
+            "app": state.app_name,
+            "version": state.version,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "host": state.host_name,
+            "flow": {
+                "flow_id": target_flow.flow_id,
+                "pid": target_flow.pid,
+                "process_name": target_flow.process_name,
+                "is_signed": target_flow.is_signed,
+                "sig_info": target_flow.sig_info,
+                "binary_path": target_flow.binary_path,
+                "command_line": target_flow.command_line,
+                "parent_process": target_flow.parent_process,
+                "sha256": target_flow.sha256,
+                "ja4": target_flow.ja4_fingerprint,
+                "mitre": target_flow.mitre_technique,
+                "user": target_flow.user_context,
+                "destination": f"{target_flow.dst_ip}:{target_flow.dst_port}",
+                "sni": target_flow.sni,
+                "threat_score": target_flow.threat_score,
+                "threat_label": target_flow.threat_label,
+                "c2_framework": target_flow.c2_framework,
+                "is_severed": target_flow.is_severed,
+                "detection_reasons": target_flow.detection_reasons,
+                "heuristic_signals": target_flow.heuristic_signals,
+            },
+        }
+    else:
+        filename = "uncloak_telemetry.json"
+        data = {
+            "app": state.app_name,
+            "version": state.version,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "host": state.host_name,
+            "total_sockets": state.total_sockets,
+            "active_beacons": state.active_beacons,
+            "flows": [
+                {
+                    "flow_id": f.flow_id,
+                    "pid": f.pid,
+                    "process_name": f.process_name,
+                    "is_signed": f.is_signed,
+                    "dst": f"{f.dst_ip}:{f.dst_port}",
+                    "sni": f.sni,
+                    "interval": f.interval_str,
+                    "jitter": f.jitter_str,
+                    "jitter_pct": f.jitter_pct,
+                    "payload": f.payload_str,
+                    "threat_score": f.threat_score,
+                    "threat_label": f.threat_label,
+                    "is_threat": f.is_threat,
+                    "c2_framework": f.c2_framework,
+                    "binary_path": f.binary_path,
+                    "is_severed": f.is_severed,
+                }
+                for f in get_visible_flows(state)
+            ],
+        }
+
+    export_path = Path.cwd() / filename
+    with open(export_path, "w", encoding="utf-8") as f_out:
+        json.dump(data, f_out, indent=2)
+
+    return filename
+
+
 class NonBlockingKeyboard:
     """Provides platform-agnostic non-blocking key reads."""
     def __init__(self) -> None:
@@ -342,8 +416,17 @@ class NonBlockingKeyboard:
                         return "UP"
                     if extended == b"P":
                         return "DOWN"
+                    if extended == b"K":
+                        return "LEFT"
+                    if extended == b"M":
+                        return "RIGHT"
+                    return None
                 if char == b"\x1b":
                     return "ESC"
+                if char in (b"\r", b"\n"):
+                    return "ENTER"
+                if char in (b"\x08", b"\x7f"):
+                    return "BACKSPACE"
                 try:
                     return char.decode("utf-8")
                 except UnicodeDecodeError:
@@ -362,14 +445,25 @@ class NonBlockingKeyboard:
                             return "UP"
                         if seq == "[B":
                             return "DOWN"
+                        if seq == "[C":
+                            return "RIGHT"
+                        if seq == "[D":
+                            return "LEFT"
                     return "ESC"
+                if ch in ("\r", "\n"):
+                    return "ENTER"
+                if ch in ("\x7f", "\x08"):
+                    return "BACKSPACE"
                 return ch
             return None
 
     def restore(self) -> None:
         if not self.is_windows:
             import termios
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_settings)
+            except Exception:
+                pass
 
 
 def run_cockpit(demo_mode: bool = True) -> int:
@@ -411,39 +505,73 @@ def run_cockpit(demo_mode: bool = True) -> int:
                 # 2. Poll non-blocking keyboard input
                 key = kb.read_key()
                 if key:
-                    key_lower = key.lower()
-
-                    visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
+                    visible_flows = get_visible_flows(state)
                     total_visible = len(visible_flows)
 
-                    # Tier 3: Process Forensic Dossier Mode Key Handling
+                    # Mode 1: Search Typing Input
+                    if state.in_search_input:
+                        if key == "ESC":
+                            state.in_search_input = False
+                            state.search_query = None
+                            state.siem_event = "Search Cancelled"
+                        elif key == "ENTER":
+                            state.in_search_input = False
+                            if not state.search_query:
+                                state.search_query = None
+                                state.siem_event = "Search Cleared"
+                            else:
+                                state.siem_event = f"Filter: '{state.search_query}'"
+                        elif key == "BACKSPACE":
+                            if state.search_query:
+                                state.search_query = state.search_query[:-1]
+                            state.selected_index = 0
+                            state.viewport_start = 0
+                        elif len(key) == 1 and key.isprintable():
+                            if state.search_query is None:
+                                state.search_query = ""
+                            state.search_query += key
+                            state.selected_index = 0
+                            state.viewport_start = 0
+                        continue
+
+                    # Mode 2: Process Forensic Dossier Modal
                     if state.show_dossier:
-                        if key in ("ESC", "\x1b") or key_lower in ("i", "q"):
+                        if key in ("ESC", "\x1b") or key.lower() in ("i", "q"):
                             state.show_dossier = False
-                        elif key_lower == "k":
+                        elif key.lower() == "k":
                             if visible_flows and 0 <= state.selected_index < total_visible:
                                 target = visible_flows[state.selected_index]
                                 if target.is_threat:
                                     target.is_severed = True
                                     target.state = "SEVERED (Host Clean)"
                                     state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
-                                    state.siem_event = "EID 9002 (Severed)"
-                        elif key_lower == "c":
+                                    state.siem_event = f"EID 9002 (Severed PID {target.pid})"
+                        elif key.lower() == "c":
                             if visible_flows and 0 <= state.selected_index < total_visible:
                                 target = visible_flows[state.selected_index]
                                 if copy_to_clipboard(target.binary_path):
-                                    state.siem_event = "Path Copied to Clipboard"
+                                    state.siem_event = f"Copied: {target.process_name}"
                                 else:
-                                    state.siem_event = f"Path: {target.process_name}"
-                        elif key_lower == "e":
+                                    state.siem_event = f"Path: {target.binary_path[:24]}"
+                        elif key.lower() == "e":
                             if visible_flows and 0 <= state.selected_index < total_visible:
                                 target = visible_flows[state.selected_index]
-                                state.siem_event = f"Dossier Exported: {target.process_name}.json"
+                                fn = export_telemetry_json(state, target_flow=target)
+                                state.siem_event = f"Saved: {fn}"
                         continue
 
-                    # Cockpit Mode Key Handling
+                    # Mode 3: Cockpit Primary Matrix Navigation
+                    key_lower = key.lower()
                     if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
                         break
+
+                    if key == "ESC":
+                        if state.search_query:
+                            state.search_query = None
+                            state.selected_index = 0
+                            state.viewport_start = 0
+                            state.siem_event = "Filter Cleared"
+                        continue
 
                     has_alert = any(f.is_threat for f in state.flows)
                     header_size = 3
@@ -466,16 +594,31 @@ def run_cockpit(demo_mode: bool = True) -> int:
                             state.selected_index += 1
                             if state.selected_index >= state.viewport_start + v_size:
                                 state.viewport_start = state.selected_index - v_size + 1
-                    elif key_lower in ("\r", "\n", "d"):  # Toggle drawer
+                    elif key in ("ENTER", "\r", "\n") or key_lower == "d":  # Toggle drawer
                         state.drawer_expanded = not state.drawer_expanded
                     elif key_lower == "i":  # Open Process Forensic Dossier
                         state.show_dossier = True
+                    elif key == "/":  # Interactive Search
+                        state.in_search_input = True
+                        state.search_query = ""
+                        state.selected_index = 0
+                        state.viewport_start = 0
+                        state.siem_event = "Search: Type query and press ENTER"
+                    elif key_lower == "s":  # Cycle Sort Order
+                        sort_options = ["threat", "interval", "payload", "pid", "process"]
+                        cur_idx = sort_options.index(state.sort_field) if state.sort_field in sort_options else 0
+                        state.sort_field = sort_options[(cur_idx + 1) % len(sort_options)]
+                        state.selected_index = 0
+                        state.viewport_start = 0
+                        state.siem_event = f"Sort: {state.sort_field.upper()}"
                     elif key == " ":  # Pause/Resume
                         state.is_paused = not state.is_paused
-                    elif key_lower == "f":  # Filter threats only
+                        state.siem_event = "Telemetry Paused" if state.is_paused else "Telemetry Resumed"
+                    elif key_lower == "f":  # Filter Threats Only
                         state.filter_threats_only = not state.filter_threats_only
                         state.selected_index = 0
                         state.viewport_start = 0
+                        state.siem_event = "Filter: Threats Only" if state.filter_threats_only else "Filter: All Flows"
                     elif key_lower == "k":  # Kill socket simulation
                         if visible_flows and 0 <= state.selected_index < total_visible:
                             target = visible_flows[state.selected_index]
@@ -483,16 +626,17 @@ def run_cockpit(demo_mode: bool = True) -> int:
                                 target.is_severed = True
                                 target.state = "SEVERED (Host Clean)"
                                 state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
-                                state.siem_event = "EID 9002 (Severed)"
+                                state.siem_event = f"EID 9002 (Severed PID {target.pid})"
                     elif key_lower == "c":  # Copy binary path
                         if visible_flows and 0 <= state.selected_index < total_visible:
                             target = visible_flows[state.selected_index]
                             if copy_to_clipboard(target.binary_path):
-                                state.siem_event = "Path Copied to Clipboard"
+                                state.siem_event = f"Copied: {target.process_name}"
                             else:
-                                state.siem_event = f"Path: {target.process_name}"
-                    elif key_lower == "e":  # Export PCAP simulation
-                        state.siem_event = "PCAP Exported: capture.pcap"
+                                state.siem_event = f"Path: {target.binary_path[:24]}"
+                    elif key_lower == "e":  # Export telemetry JSON
+                        fn = export_telemetry_json(state)
+                        state.siem_event = f"Saved: {fn}"
 
                 # 3. Dynamic active beacon calculation & packet rates
                 if not state.is_paused and demo_mode:
@@ -502,6 +646,8 @@ def run_cockpit(demo_mode: bool = True) -> int:
                 live.update(build_cockpit_layout(state, width=console.width, height=console.height))
                 time.sleep(0.05)
 
+    except KeyboardInterrupt:
+        pass
     finally:
         kb.restore()
 
