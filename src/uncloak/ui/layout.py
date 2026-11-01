@@ -40,7 +40,7 @@ class FlowEntry:
     sig_info: str = "Unsigned PE"
     sha256: str = "e3b0c44298fc1c14..."
     ja4_fingerprint: str = "t13d1516h2_8daaf6152771_0266e33433e9"
-    heuristic_signals: str = "Periodicity (0.99) │ Low Jitter (<3%)"
+    heuristic_signals: str = "Beacon 0.99 │ Direct IP"
     detection_reasons: str = "Direct IP (No SNI) │ Static 512B Beacon"
     bursts: str = "14 bursts / 2m"
     user_context: str = "CORP\\jdoe (Standard)"
@@ -398,36 +398,44 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     # Card 1: Host Attribution (Green title [ HOST ATTRIBUTION ])
     c1 = Text()
-    c1.append("• PID       : ", style="#64748b")
+    c1.append("• PID         : ", style="#64748b")
     c1.append(f"{selected_flow.pid}\n", style="bold white")
-    c1.append("• Process   : ", style="#64748b")
+    c1.append("• Process     : ", style="#64748b")
     proc_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else ("bold #38bdf8" if selected_flow.is_severed else "bold white")
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
-    c1.append("• Path      : ", style="#64748b")
+    c1.append("• Path        : ", style="#64748b")
     path_display = selected_flow.binary_path
-    if len(path_display) > 28:
+    if len(path_display) > 24:
         if "WindowsPowerShell" in path_display:
-            path_display = r"C:\Windows\...\powershell.exe"
+            path_display = r"C:\...\powershell.exe"
         elif "WindowsApps" in path_display:
-            path_display = r"C:\Program Files\...\teams.exe"
+            path_display = r"C:\...\teams.exe"
         elif "AppData" in path_display:
-            path_display = r"C:\Users\...\update.exe"
+            path_display = r"C:\...\update.exe"
+        elif "rundll32" in path_display:
+            path_display = r"C:\...\rundll32.exe"
+        elif "Chrome" in path_display:
+            path_display = r"C:\...\chrome.exe"
+        elif "Edge" in path_display:
+            path_display = r"C:\...\msedge.exe"
+        elif "Docker" in path_display:
+            path_display = r"C:\...\docker.exe"
         else:
-            path_display = path_display[:12] + "..." + path_display[-12:]
+            path_display = path_display[:10] + "..." + path_display[-10:]
     c1.append(f"{path_display}\n", style="#cbd5e1")
-    c1.append("• Signature : ", style="#64748b")
+    c1.append("• Signature   : ", style="#64748b")
     if selected_flow.is_signed:
         sig_str = "MS Catalog Signed (✓)" if "Microsoft" in selected_flow.sig_info else f"{selected_flow.sig_info[:18]} (✓)"
         c1.append(f"{sig_str}\n", style="bold #10b981")
     else:
         c1.append("Unsigned PE (In-Memory)\n", style="bold #ef4444")
-    c1.append("• JA4       : ", style="#64748b")
+    c1.append("• JA4         : ", style="#64748b")
     ja4_disp = selected_flow.ja4_fingerprint
-    if len(ja4_disp) > 22:
+    if len(ja4_disp) > 18:
         ja4_disp = ja4_disp[:10] + "_" + ja4_disp[11:15] + "..."
     c1.append(f"{ja4_disp}\n", style="#94a3b8")
-    c1.append("• User      : ", style="#64748b")
-    c1.append(f"{selected_flow.user_context[:24]}", style="#cbd5e1")
+    c1.append("• User        : ", style="#64748b")
+    c1.append(f"{selected_flow.user_context[:20]}", style="#cbd5e1")
 
     p1 = Panel(
         c1,
@@ -440,14 +448,14 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     # Card 2: Cadence & Timing (Amber title [ CADENCE & TIMING ])
     c2 = Text()
-    c2.append("• Interval  : ", style="#64748b")
+    c2.append("• Interval    : ", style="#64748b")
     if selected_flow.is_severed:
         c2.append("Inactive (TCB Killed)\n", style="bold #38bdf8")
     else:
         int_style = "bold #f59e0b" if selected_flow.is_threat else "bold white"
         c2.append(f"{selected_flow.interval_str} ", style=int_style)
         c2.append(f"({selected_flow.jitter_str})\n", style="#64748b")
-    c2.append("• Heartbeat : ", style="#64748b")
+    c2.append("• Heartbeat   : ", style="#64748b")
     if selected_flow.is_severed:
         hb_style = "bold #38bdf8"
         hb_text = "SEVERED (Stack Killed)"
@@ -458,19 +466,19 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         hb_style = "bold #10b981"
         hb_text = "RANDOM (Human Flow)"
     c2.append(f"{hb_text}\n", style=hb_style)
-    c2.append("• Pulse     : ", style="#64748b")
+    c2.append("• Pulse       : ", style="#64748b")
     if selected_flow.is_severed:
         c2.append("──  ──  ── (Terminated)\n", style="#64748b")
     else:
         spark_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
         c2.append(f"{selected_flow.sparkline} ", style=spark_style)
         c2.append("(Rigid)\n" if selected_flow.is_threat else "(Normal)\n", style="#64748b")
-    c2.append("• Payload   : ", style="#64748b")
+    c2.append("• Payload     : ", style="#64748b")
     c2.append(f"{selected_flow.payload_str} ", style="bold white")
     c2.append(f"({'Fixed' if selected_flow.is_threat else 'Dynamic'})\n", style="#64748b")
-    c2.append("• Signals   : ", style="#64748b")
-    c2.append(f"{selected_flow.heuristic_signals}\n", style="#cbd5e1")
-    c2.append("• Jitter    : ", style="#64748b")
+    c2.append("• Signals     : ", style="#64748b")
+    c2.append(f"{selected_flow.heuristic_signals[:26]}\n", style="#cbd5e1")
+    c2.append("• Jitter      : ", style="#64748b")
     jitter_style = "bold #ef4444" if selected_flow.is_threat and not selected_flow.is_severed else "#10b981"
     c2.append(f"{selected_flow.jitter_pct} ", style=jitter_style)
     c2.append("(Anomalous)" if selected_flow.is_threat and not selected_flow.is_severed else "(Normal)", style="#64748b")
@@ -488,45 +496,45 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c3 = Text()
     if selected_flow.is_threat:
         if selected_flow.is_severed:
-            c3.append("• MITRE     : ", style="#64748b")
+            c3.append("• MITRE       : ", style="#64748b")
             c3.append("T1059.001 (PowerShell)\n", style="bold white")
-            c3.append("• API       : ", style="#64748b")
+            c3.append("• API         : ", style="#64748b")
             c3.append("SetTcpEntry (TCB Delete)\n", style="bold #06b6d4")
-            c3.append("• Action    : ", style="#64748b")
+            c3.append("• Action      : ", style="#64748b")
             c3.append("Kernel Stack Cleared\n", style="bold #10b981")
-            c3.append("• State     : ", style="#64748b")
+            c3.append("• State       : ", style="#64748b")
             c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
-            c3.append("• Audit     : ", style="#64748b")
+            c3.append("• Audit       : ", style="#64748b")
             c3.append(f"SQLite #{selected_flow.flow_id} │ EID 9002\n", style="#cbd5e1")
-            c3.append("• Status    : ", style="#64748b")
+            c3.append("• Status      : ", style="#64748b")
             c3.append("Mitigation Complete", style="bold #10b981")
         else:
-            c3.append("• MITRE     : ", style="#64748b")
+            c3.append("• MITRE       : ", style="#64748b")
             mitre_disp = selected_flow.mitre_technique[:24] if selected_flow.mitre_technique else "T1071.001 (Web C2)"
             c3.append(f"{mitre_disp}\n", style="bold white")
-            c3.append("• API       : ", style="#64748b")
+            c3.append("• API         : ", style="#64748b")
             c3.append("SetTcpEntry (Armed)\n", style="bold #f59e0b")
-            c3.append("• Action    : ", style="#64748b")
+            c3.append("• Action      : ", style="#64748b")
             c3.append("Persistent C2 Isolated\n", style="bold #ef4444")
-            c3.append("• State     : ", style="#64748b")
+            c3.append("• State       : ", style="#64748b")
             c3.append("ESTABLISHED (C2 Active)\n", style="bold #ef4444")
-            c3.append("• Audit     : ", style="#64748b")
+            c3.append("• Audit       : ", style="#64748b")
             c3.append(f"SQLite #{selected_flow.flow_id} │ EID 9001\n", style="#cbd5e1")
-            c3.append("• Status    : ", style="#64748b")
+            c3.append("• Status      : ", style="#64748b")
             c3.append("Press [K] to Sever", style="bold #f59e0b")
     else:
         # BENIGN FLOW - Authenticated enterprise process
-        c3.append("• MITRE     : ", style="#64748b")
+        c3.append("• MITRE       : ", style="#64748b")
         c3.append("None (Benign Profile)\n", style="bold #10b981")
-        c3.append("• Engine    : ", style="#64748b")
+        c3.append("• Engine      : ", style="#64748b")
         c3.append("Npcap BPF Sniffer\n", style="bold #06b6d4")
-        c3.append("• Action    : ", style="#64748b")
+        c3.append("• Action      : ", style="#64748b")
         c3.append("Permitted (Baseline)\n", style="bold #10b981")
-        c3.append("• State     : ", style="#64748b")
+        c3.append("• State       : ", style="#64748b")
         c3.append("ESTABLISHED (Flowing)\n", style="bold #10b981")
-        c3.append("• Audit     : ", style="#64748b")
+        c3.append("• Audit       : ", style="#64748b")
         c3.append(f"Telemetry #{selected_flow.flow_id} │ Baseline\n", style="#cbd5e1")
-        c3.append("• Status    : ", style="#64748b")
+        c3.append("• Status      : ", style="#64748b")
         c3.append("Allowlisted Baseline", style="bold #10b981")
 
     p3 = Panel(
