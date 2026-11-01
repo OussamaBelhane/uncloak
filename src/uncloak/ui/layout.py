@@ -163,11 +163,11 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Op
     l2.append(f" ({top_threat.process_name})", style="#94a3b8")
 
     r2 = Text()
-    action_str = "ACTION: SetTcpEntry -> RST Injected" if (top_threat.is_severed or inner_w >= 120) else "ACTION: [K] SetTcpEntry -> RST"
+    action_str = "ACTION: SetTcpEntry -> RST Injected" if (top_threat.is_severed or inner_w >= 124) else "ACTION: SetTcpEntry -> RST"
     r2.append(action_str, style="bold #10b981")
-    r2.append("        ")
+    r2.append(" │ ", style="#334155")
     r2.append("EVENT: ", style="#94a3b8")
-    r2.append("EID 9002 Dispatched", style="bold white")
+    r2.append("EID 9002", style="bold white")
 
     sp2 = max(1, inner_w - len(l2.plain) - len(r2.plain))
     row2 = Text()
@@ -198,22 +198,18 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     total = len(visible_flows)
     has_alert = any(f.is_threat for f in state.flows)
     if table_height is not None:
-        v_size = max(2, table_height - 4)
+        v_size = max(2, table_height - 3)
     else:
         v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
     start = max(0, min(state.viewport_start, max(0, total - v_size)))
     end = min(total, start + v_size)
     slice_flows = visible_flows[start:end]
 
-    # Sub-Header bar
-    sub_header = Table.grid(expand=True)
-    sub_header.add_column(no_wrap=True)
-    sub_header.add_column(justify="right", no_wrap=True)
-
+    # Sub-Header bar title & subtitle for panel border
     sh_left = Text()
-    sh_left.append(f"ACTIVE FLOWS ({state.total_sockets})", style="bold white")
+    sh_left.append(f" ACTIVE FLOWS ({state.total_sockets}) ", style="bold white")
     if state.filter_threats_only:
-        sh_left.append(" [FILTERED: Threats Only]", style="bold #f59e0b")
+        sh_left.append("[FILTERED: Threats Only] ", style="bold #f59e0b")
 
     sh_right = Text()
     curr_pos = min(total, state.selected_index + 1) if total > 0 else 0
@@ -242,9 +238,7 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
         sh_right.append(track_after, style="#1e293b")
     sh_right.append(f" {pct_val}%", style="#64748b")
     sh_right.append(" │ ", style="#334155")
-    sh_right.append("[ENTER] Toggle Drawer", style="#94a3b8")
-
-    sub_header.add_row(sh_left, sh_right)
+    sh_right.append("[ENTER] Toggle Drawer ", style="#94a3b8")
 
     # 7-Column Table
     table = Table(
@@ -321,13 +315,12 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
 
             table.add_row(c_pid, c_proc, c_dst, c_sni, c_int, c_pay, c_thr, style=row_bg)
 
-    container = Table.grid(expand=True)
-    container.add_column()
-    container.add_row(sub_header)
-    container.add_row(table)
-
     return Panel(
-        container,
+        table,
+        title=sh_left,
+        title_align="left",
+        subtitle=sh_right,
+        subtitle_align="right",
         box=box.ROUNDED,
         style="on #090e1c",
         border_style="#1e293b",
@@ -340,33 +333,21 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     if not selected_flow:
         return Panel(Text("No session selected for inspection", style="dim center"), border_style="#1e293b")
 
-    dt = Table.grid(expand=True)
-    dt.add_column(ratio=1)
-    dt.add_column(ratio=1, justify="right")
-    dt_left = Text()
-    dt_left.append("DETAIL : ", style="bold #f59e0b")
-    dt_left.append(f"{selected_flow.dst_ip}:{selected_flow.dst_port} ", style="bold #f59e0b")
-    dt_left.append(f"(PID {selected_flow.pid})", style="bold #f59e0b")
+    dt_left = Text(f" DETAIL : {selected_flow.dst_ip}:{selected_flow.dst_port} (PID {selected_flow.pid}) ", style="bold #f59e0b")
+    dt_right = Text("[ENTER] Collapse ", style="#64748b")
 
-    dt_right = Text()
-    dt_right.append("[", style="#64748b")
-    dt_right.append("ENTER", style="bold white")
-    dt_right.append("] Collapse", style="#64748b")
-
-    dt.add_row(dt_left, dt_right)
-
-    # Card 1: Host Attribution
+    # Card 1: Host Attribution (5 lines)
     c1 = Text()
     c1.append("• PID       : ", style="#64748b")
     c1.append(f"{selected_flow.pid}\n", style="bold white")
     c1.append("• Process   : ", style="#64748b")
     proc_style = "bold #ef4444" if selected_flow.is_threat else "bold white"
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
-    c1.append("• Binary    :\n", style="#64748b")
+    c1.append("• Binary    : ", style="#64748b")
     path_display = selected_flow.binary_path
-    if len(path_display) > 36:
-        path_display = path_display[:18] + "..." + path_display[-15:]
-    c1.append(f"  {path_display}\n", style="#cbd5e1")
+    if len(path_display) > 23:
+        path_display = path_display[:10] + "..." + path_display[-10:]
+    c1.append(f"{path_display}\n", style="#cbd5e1")
     c1.append("• Signature : ", style="#64748b")
     sig_style = "bold #ef4444" if not selected_flow.is_signed else "bold #10b981"
     c1.append(f"{selected_flow.sig_info}\n", style=sig_style)
@@ -374,14 +355,14 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c1.append(f"{selected_flow.sha256[:16]}...", style="#64748b")
     p1 = Panel(
         c1,
-        title="[bold #10b981][ HOST ATTRIBUTION ][/]",
+        title="[bold #3b82f6][ HOST ATTRIBUTION ][/]",
         box=box.ROUNDED,
         style="on #060913",
         border_style="#1e293b",
         padding=(0, 1),
     )
 
-    # Card 2: Cadence & Timing
+    # Card 2: Cadence & Timing (5 lines)
     c2 = Text()
     c2.append("• Interval  : ", style="#64748b")
     c2.append(f"{selected_flow.interval_str} ", style="bold #f59e0b")
@@ -397,11 +378,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c2.append(f"{selected_flow.payload_str} ", style="bold white")
     c2.append(f"({'Fixed' if selected_flow.is_threat else 'Dynamic'})\n", style="#64748b")
     c2.append("• Bursts    : ", style="#64748b")
-    c2.append(f"{selected_flow.bursts}\n", style="#cbd5e1")
-    c2.append("• Jitter    : ", style="#64748b")
-    jitter_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
-    c2.append(f"{selected_flow.jitter_pct} ", style=jitter_style)
-    c2.append("(Anomalous)" if selected_flow.is_threat else "(Normal)", style="#64748b")
+    c2.append(f"{selected_flow.bursts} ({selected_flow.jitter_pct})", style="#cbd5e1")
     p2 = Panel(
         c2,
         title="[bold #f59e0b][ CADENCE & TIMING ][/]",
@@ -411,7 +388,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         padding=(0, 1),
     )
 
-    # Card 3: Forensic & MITRE
+    # Card 3: Forensic & MITRE (5 lines)
     c3 = Text()
     c3.append("• MITRE : ", style="#64748b")
     c3.append(f"{selected_flow.mitre_technique}\n", style="bold white")
@@ -422,8 +399,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c3.append("• State : ", style="#64748b")
     c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
     c3.append("• Audit : ", style="#64748b")
-    c3.append("SQLite #142  EID 9002\n", style="#cbd5e1")
-    c3.append(" ", style="dim")
+    c3.append("SQLite #142  EID 9002", style="#cbd5e1")
     p3 = Panel(
         c3,
         title="[bold #06b6d4][ FORENSIC & MITRE ][/]",
@@ -439,13 +415,12 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     dg.add_column(ratio=1)
     dg.add_row(p1, p2, p3)
 
-    drawer_container = Table.grid(expand=True)
-    drawer_container.add_column()
-    drawer_container.add_row(dt)
-    drawer_container.add_row(dg)
-
     return Panel(
-        drawer_container,
+        dg,
+        title=dt_left,
+        title_align="left",
+        subtitle=dt_right,
+        subtitle_align="right",
         box=box.ROUNDED,
         style="on #090e1c",
         border_style="#1e293b",
@@ -507,14 +482,14 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
     fixed_overhead = header_size + alert_size + footer_size
 
     # Responsive vertical budgeting ensuring footer is never clipped
-    term_height = height if (height and height > 18) else 33
+    term_height = height if (height and height >= 20) else 28
     avail = term_height - fixed_overhead
 
     if state.drawer_expanded:
-        drawer_size = 11
-        table_size = max(10, min(14, avail - drawer_size))
+        drawer_size = 9
+        table_size = max(5, avail - drawer_size)
     else:
-        table_size = max(10, avail)
+        table_size = max(5, avail)
 
     sections = [
         Layout(name="header", size=header_size),

@@ -305,13 +305,13 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
                     total_visible = len(visible_flows)
                     has_alert = any(f.is_threat for f in state.flows)
-                    fixed_overhead = 3 + (4 if has_alert else 0) + 3
-                    avail = console.height - fixed_overhead
+                    term_h = console.height if (console.height and console.height >= 20) else 28
+                    avail = term_h - fixed_overhead
                     if state.drawer_expanded:
-                        table_size = max(10, min(14, avail - 11))
+                        table_size = max(5, avail - 9)
                     else:
-                        table_size = max(10, avail)
-                    v_size = max(2, table_size - 4)
+                        table_size = max(5, avail)
+                    v_size = max(2, table_size - 3)
 
                     if key == "UP":
                         if state.selected_index > 0:
