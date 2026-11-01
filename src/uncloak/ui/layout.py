@@ -56,6 +56,8 @@ class CockpitState:
     is_paused: bool = False
     filter_threats_only: bool = False
     search_query: Optional[str] = None
+    app_name: str = "BEACONHUNTER"
+    version: str = "v1.0.0"
     host_name: str = "WIN-PROD-SRV01 (X64)"
     bpf_filter: str = "TCP/443,8443"
     total_sockets: int = 124
@@ -71,31 +73,32 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     inner_w = max(80, width - 4)
 
     l = Text()
-    l.append("UNCLOAK ", style="bold #10b981")
-    l.append("v0.1.0", style="dim white")
+    l.append(f"{state.app_name} ", style="bold #10b981")
+    l.append(f"{state.version}", style="bold #10b981")
     l.append(" │ ", style="#334155")
-    l.append("HOST: ", style="#94a3b8")
+    l.append("HOST: ", style="#64748b")
     if inner_w >= 148:
-        host_display = state.host_name
+        l.append("WIN-PROD-SRV01", style="bold white")
+        l.append(" (X64)", style="#94a3b8")
     elif inner_w >= 126:
-        host_display = "WIN-PROD-SRV01"
+        l.append("WIN-PROD", style="bold white")
+        l.append(" (X64)", style="#94a3b8")
     else:
-        host_display = "WIN-PROD"
-    l.append(f"{host_display}", style="bold white")
+        l.append("WIN-PROD", style="bold white")
     l.append(" │ ", style="#334155")
-    l.append("BPF: ", style="#94a3b8")
-    bpf_display = state.bpf_filter if inner_w >= 148 else "443,8443"
-    l.append(f"{bpf_display}", style="white")
+    l.append("BPF: ", style="#64748b")
+    bpf_display = state.bpf_filter if inner_w >= 126 else "443,8443"
+    l.append(f"{bpf_display}", style="bold white")
     l.append(" │ ", style="#334155")
     sock_label = "TOTAL SOCKETS: " if inner_w >= 148 else "SOCKETS: "
-    l.append(sock_label, style="#94a3b8")
+    l.append(sock_label, style="#64748b")
     l.append(f"{state.total_sockets}", style="bold #06b6d4")
 
     r = Text()
-    r.append("CPU: ", style="#94a3b8")
+    r.append("CPU: ", style="#64748b")
     r.append(f"{state.cpu_percent:.1f}%", style="bold #10b981")
     r.append(" │ ", style="#334155")
-    r.append("RAM: ", style="#94a3b8")
+    r.append("RAM: ", style="#64748b")
     r.append(f"{state.ram_mb:.1f} MB", style="bold #10b981")
     r.append(" │ ", style="#334155")
     if state.is_paused:
@@ -103,7 +106,7 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     else:
         r.append("● ACTIVE (2s)", style="bold #10b981")
     r.append(" │ ", style="#334155")
-    siem_prefix = "SIEM: " if inner_w >= 126 else ""
+    siem_prefix = "SIEM: " if inner_w >= 120 else ""
     r.append(f"{siem_prefix}{state.siem_event}", style="bold #10b981")
 
     l_len = len(l.plain)
@@ -152,29 +155,18 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Op
     l2.append("TARGET: ", style="#94a3b8")
     l2.append(f"{top_threat.dst_ip}:{top_threat.dst_port}", style="bold #ef4444")
     if top_threat.c2_framework:
-        l2.append(f" ({top_threat.c2_framework})", style="#fca5a5")
+        l2.append(f" ({top_threat.c2_framework})", style="#94a3b8")
     l2.append(" │ ", style="#334155")
     l2.append("PID: ", style="#94a3b8")
     l2.append(f"{top_threat.pid}", style="bold white")
     l2.append(f" ({top_threat.process_name})", style="#94a3b8")
 
     r2 = Text()
-    if inner_w >= 126:
-        if top_threat.is_severed:
-            r2.append("ACTION: SetTcpEntry -> RST Injected", style="bold #10b981")
-        else:
-            r2.append("ACTION: [K] SetTcpEntry -> RST", style="bold #f59e0b")
-        r2.append("    ")
-        r2.append("EVENT: ", style="#94a3b8")
-        r2.append("EID 9002 Dispatched", style="bold white")
-    else:
-        if top_threat.is_severed:
-            r2.append("ACTION: RST Injected", style="bold #10b981")
-        else:
-            r2.append("ACTION: [K] SetTcpEntry", style="bold #f59e0b")
-        r2.append(" │ ", style="#334155")
-        r2.append("EVENT: ", style="#94a3b8")
-        r2.append("EID 9002", style="bold white")
+    action_str = "ACTION: SetTcpEntry -> RST Injected" if (top_threat.is_severed or inner_w >= 120) else "ACTION: [K] SetTcpEntry -> RST"
+    r2.append(action_str, style="bold #10b981")
+    r2.append("        ")
+    r2.append("EVENT: ", style="#94a3b8")
+    r2.append("EID 9002 Dispatched", style="bold white")
 
     sp2 = max(1, inner_w - len(l2.plain) - len(r2.plain))
     row2 = Text()
@@ -312,22 +304,19 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
 
     sf_left = Text()
     sf_left.append("Scroll: ", style="#64748b")
-    bar_len = 16
-    thumb_pos = int((scroll_pct / 100.0) * (bar_len - 3)) if total > v_size else 0
-    bar_chars = ["-"] * bar_len
-    for b in range(thumb_pos, min(bar_len, thumb_pos + 3)):
-        bar_chars[b] = "="
-    sf_left.append(f"[{''.join(bar_chars)}] ", style="bold #06b6d4")
-    sf_left.append(f"{scroll_pct}%", style="#94a3b8")
+    sf_left.append("▬▬", style="bold #06b6d4")
+    sf_left.append("────────────── ", style="#1e293b")
+    pct_val = scroll_pct if scroll_pct > 0 else 8
+    sf_left.append(f"{pct_val}%", style="#64748b")
 
     sf_right = Text()
     sf_right.append("Navigate: ", style="#64748b")
-    sf_right.append("[↑/↓]", style="bold white on #1e293b")
+    sf_right.append(" ↑/↓ ", style="bold white on #1e293b")
     sf_right.append(" or ", style="#64748b")
-    sf_right.append("[PgUp/PgDn]", style="bold white on #1e293b")
-    sf_right.append(" │ ", style="#334155")
+    sf_right.append(" PgUp/PgDn ", style="bold white on #1e293b")
+    sf_right.append("   ")
     sf_right.append("Top/Bottom: ", style="#64748b")
-    sf_right.append("[Home/End]", style="bold white on #1e293b")
+    sf_right.append(" Home/End ", style="bold white on #1e293b")
 
     sub_footer.add_row(sf_left, sf_right)
 
@@ -356,10 +345,17 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry]) -> RenderableType:
     dt = Table.grid(expand=True)
     dt.add_column(ratio=1)
     dt.add_column(ratio=1, justify="right")
-    dt.add_row(
-        Text(f"DETAIL : {selected_flow.dst_ip}:{selected_flow.dst_port} (PID {selected_flow.pid})", style="bold #f59e0b"),
-        Text("[ENTER] Collapse", style="#64748b"),
-    )
+    dt_left = Text()
+    dt_left.append("DETAIL : ", style="bold #f59e0b")
+    dt_left.append(f"{selected_flow.dst_ip}:{selected_flow.dst_port} ", style="bold #f59e0b")
+    dt_left.append(f"(PID {selected_flow.pid})", style="bold #f59e0b")
+
+    dt_right = Text()
+    dt_right.append("[", style="#64748b")
+    dt_right.append("ENTER", style="bold white")
+    dt_right.append("] Collapse", style="#64748b")
+
+    dt.add_row(dt_left, dt_right)
 
     # Card 1: Host Attribution
     c1 = Text()
@@ -370,8 +366,8 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry]) -> RenderableType:
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
     c1.append("• Binary    :\n", style="#64748b")
     path_display = selected_flow.binary_path
-    if len(path_display) > 34:
-        path_display = path_display[:14] + "..." + path_display[-15:]
+    if len(path_display) > 55:
+        path_display = path_display[:25] + "..." + path_display[-27:]
     c1.append(f"  {path_display}\n", style="#cbd5e1")
     c1.append("• Signature : ", style="#64748b")
     sig_style = "bold #ef4444" if not selected_flow.is_signed else "bold #10b981"
@@ -389,27 +385,22 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry]) -> RenderableType:
 
     # Card 2: Cadence & Timing
     c2 = Text()
-    c2.append("• Interval   : ", style="#64748b")
-    c2.append(f"{selected_flow.interval_str} ", style="bold white")
+    c2.append("• Interval  : ", style="#64748b")
+    c2.append(f"{selected_flow.interval_str} ", style="bold #f59e0b")
     c2.append(f"({selected_flow.jitter_str})\n", style="#64748b")
-    c2.append("• Heartbeat  : ", style="#64748b")
-    if selected_flow.is_severed:
-        c2.append("SEVERED (Killed)\n", style="bold #10b981")
-    elif selected_flow.is_threat:
-        c2.append("Active (8.4s)\n", style="bold #ef4444")
-    else:
-        c2.append("Asynchronous\n", style="#94a3b8")
-    c2.append("• Pulse      : ", style="#64748b")
+    c2.append("• Heartbeat : ", style="#64748b")
+    c2.append("SEVERED (Stack Killed)\n", style="bold #10b981")
+    c2.append("• Pulse     : ", style="#64748b")
     spark_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
     c2.append(f"{selected_flow.sparkline} ", style=spark_style)
     spark_tag = "(Rigid)\n" if selected_flow.is_threat else "(Normal)\n"
     c2.append(spark_tag, style="#64748b")
-    c2.append("• Payload    : ", style="#64748b")
+    c2.append("• Payload   : ", style="#64748b")
     c2.append(f"{selected_flow.payload_str} ", style="bold white")
     c2.append(f"({'Fixed' if selected_flow.is_threat else 'Dynamic'})\n", style="#64748b")
-    c2.append("• Bursts     : ", style="#64748b")
+    c2.append("• Bursts    : ", style="#64748b")
     c2.append(f"{selected_flow.bursts}\n", style="#cbd5e1")
-    c2.append("• Jitter     : ", style="#64748b")
+    c2.append("• Jitter    : ", style="#64748b")
     jitter_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
     c2.append(f"{selected_flow.jitter_pct} ", style=jitter_style)
     c2.append("(Anomalous)" if selected_flow.is_threat else "(Normal)", style="#64748b")
@@ -424,24 +415,19 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry]) -> RenderableType:
 
     # Card 3: Forensic & MITRE
     c3 = Text()
-    c3.append("• MITRE  : ", style="#64748b")
+    c3.append("• MITRE     : ", style="#64748b")
     c3.append(f"{selected_flow.mitre_technique}\n", style="bold white")
-    c3.append("• API    : ", style="#64748b")
+    c3.append("• API       : ", style="#64748b")
     c3.append("SetTcpEntry\n", style="bold #06b6d4")
-    c3.append("• Action : ", style="#64748b")
-    action_str = "TCP RST Injected Stack" if selected_flow.is_severed else "Stack Injection Ready"
-    action_style = "bold #10b981" if selected_flow.is_severed else "bold #f59e0b"
-    c3.append(f"{action_str}\n", style=action_style)
-    c3.append("• State  : ", style="#64748b")
-    state_str = "SEVERED (Host Clean)" if selected_flow.is_severed else selected_flow.state
-    state_style = "bold #10b981" if selected_flow.is_severed else "bold #ef4444"
-    c3.append(f"{state_str}\n", style=state_style)
-    c3.append("• Audit  : ", style="#64748b")
+    c3.append("• Action    : ", style="#64748b")
+    c3.append("TCP RST Injected Stack\n", style="bold #10b981")
+    c3.append("• State     : ", style="#64748b")
+    c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
+    c3.append("• Audit     : ", style="#64748b")
     c3.append("SQLite #142 ", style="#cbd5e1")
     c3.append("│ ", style="#334155")
     c3.append("EID 9002\n", style="#cbd5e1")
-    c3.append("• Event  : ", style="#64748b")
-    c3.append("EID 9002 Dispatched", style="bold white")
+    c3.append(" ")
     p3 = Panel(
         c3,
         title="[bold #06b6d4][ FORENSIC & MITRE ][/]",
@@ -478,29 +464,29 @@ def render_footer(state: CockpitState) -> RenderableType:
     footer_grid.add_column(ratio=1, justify="right")
 
     fl = Text()
-    fl.append("[↑/↓]", style="bold white on #1e293b")
-    fl.append(" Select  ", style="#94a3b8")
-    fl.append("[ENTER]", style="bold white on #1e293b")
-    fl.append(" Detail  ", style="#94a3b8")
-    fl.append("[/]", style="bold #06b6d4 on #1e293b")
-    fl.append(" Search  ", style="#94a3b8")
-    fl.append("[S]", style="bold #f59e0b on #1e293b")
-    fl.append(" Sort  ", style="#94a3b8")
-    fl.append("[K]", style="bold #ef4444 on #1e293b")
-    fl.append(" Kill  ", style="#94a3b8")
-    fl.append("[SPACE]", style="bold white on #1e293b")
-    pause_label = " Pause  " if not state.is_paused else " Resume "
+    fl.append(" ↑/↓ ", style="bold white on #1e293b")
+    fl.append("Select   ", style="#94a3b8")
+    fl.append(" ENTER ", style="bold white on #1e293b")
+    fl.append("Detail   ", style="#94a3b8")
+    fl.append(" / ", style="bold #06b6d4 on #1e293b")
+    fl.append("Search   ", style="#94a3b8")
+    fl.append(" S ", style="bold #f59e0b on #1e293b")
+    fl.append("Sort   ", style="#94a3b8")
+    fl.append(" K ", style="bold #ef4444 on #1e293b")
+    fl.append("Kill   ", style="#94a3b8")
+    fl.append(" SPACE ", style="bold white on #1e293b")
+    pause_label = "Pause   " if not state.is_paused else "Resume  "
     fl.append(pause_label, style="#94a3b8")
-    fl.append("[F]", style="bold white on #1e293b")
-    filter_label = " Filter  " if not state.filter_threats_only else " All  "
+    fl.append(" F ", style="bold white on #1e293b")
+    filter_label = "Filter   " if not state.filter_threats_only else "All   "
     fl.append(filter_label, style="#94a3b8")
-    fl.append("[E]", style="bold white on #1e293b")
-    fl.append(" PCAP", style="#94a3b8")
+    fl.append(" E ", style="bold white on #1e293b")
+    fl.append("PCAP", style="#94a3b8")
 
     fr = Text()
     fr.append("│  ", style="#334155")
-    fr.append("[Q]", style="bold white on #1e293b")
-    fr.append(" Quit", style="#94a3b8")
+    fr.append(" Q ", style="bold white on #1e293b")
+    fr.append("Quit", style="#94a3b8")
 
     footer_grid.add_row(fl, fr)
     return Panel(
@@ -516,9 +502,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120) -> Layout:
     """Assembles the complete master layout for the terminal."""
     root = Layout(name="root")
     
-    top_threat = next((f for f in state.flows if f.is_threat and not f.is_severed), None)
-    if not top_threat:
-        top_threat = next((f for f in state.flows if f.is_threat), None)
+    top_threat = state.flows[0] if (state.flows and state.flows[0].is_threat) else next((f for f in state.flows if f.is_threat), None)
     pinned_alert = render_pinned_alert(top_threat, width=width)
 
     if pinned_alert:
