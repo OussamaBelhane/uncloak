@@ -195,7 +195,8 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
         visible_flows = [f for f in state.flows if f.is_threat]
 
     total = len(visible_flows)
-    v_size = 6 if state.drawer_expanded else 16
+    has_alert = any(f.is_threat for f in state.flows)
+    v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
     start = max(0, min(state.viewport_start, max(0, total - v_size)))
     end = min(total, start + v_size)
     slice_flows = visible_flows[start:end]
@@ -499,24 +500,25 @@ def build_cockpit_layout(state: CockpitState, width: int = 120) -> Layout:
     top_threat = state.flows[0] if (state.flows and state.flows[0].is_threat) else next((f for f in state.flows if f.is_threat), None)
     pinned_alert = render_pinned_alert(top_threat, width=width)
 
+    sections = [
+        Layout(name="header", size=3),
+    ]
+
     if pinned_alert:
-        table_size = 11 if state.drawer_expanded else 17
-        root.split_column(
-            Layout(name="header", size=3),
-            Layout(name="alert", size=4),
-            Layout(name="main_table", size=table_size),
-            Layout(name="drawer", size=11 if state.drawer_expanded else 0),
-            Layout(name="footer", size=3),
-        )
+        sections.append(Layout(name="alert", size=4))
+
+    table_size = 11 if state.drawer_expanded else (17 if pinned_alert else 21)
+    sections.append(Layout(name="main_table", size=table_size))
+
+    if state.drawer_expanded:
+        sections.append(Layout(name="drawer", size=11))
+
+    sections.append(Layout(name="footer", size=3))
+
+    root.split_column(*sections)
+
+    if pinned_alert:
         root["alert"].update(pinned_alert)
-    else:
-        table_size = 15 if state.drawer_expanded else 21
-        root.split_column(
-            Layout(name="header", size=3),
-            Layout(name="main_table", size=table_size),
-            Layout(name="drawer", size=11 if state.drawer_expanded else 0),
-            Layout(name="footer", size=3),
-        )
 
     root["header"].update(render_header(state, width=width))
     root["main_table"].update(render_table(state, width=width))

@@ -304,7 +304,8 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     
                     visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
                     total_visible = len(visible_flows)
-                    v_size = 6 if state.drawer_expanded else 16
+                    has_alert = any(f.is_threat for f in state.flows)
+                    v_size = 6 if state.drawer_expanded else (12 if has_alert else 16)
 
                     if key == "UP":
                         if state.selected_index > 0:
