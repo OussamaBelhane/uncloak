@@ -96,7 +96,7 @@ def get_demo_flows() -> list[FlowEntry]:
             sha256="99182abfc012781bcf4401a998bc41270ae19b88",
             bursts="5 bursts / 5m",
             user_context=r"CORP\jdoe (Standard)",
-            is_severed=False,
+            is_severed=True,
             mitre_technique="T1059.001 (PowerShell C2)",
             state="ESTABLISHED",
             packets=45,
@@ -305,13 +305,15 @@ def run_cockpit(demo_mode: bool = True) -> int:
                     visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
                     total_visible = len(visible_flows)
                     has_alert = any(f.is_threat for f in state.flows)
-                    term_h = console.height if (console.height and console.height >= 20) else 28
-                    avail = term_h - fixed_overhead
-                    if state.drawer_expanded:
-                        table_size = max(5, avail - 9)
-                    else:
-                        table_size = max(5, avail)
-                    v_size = max(2, table_size - 3)
+                    header_size = 3
+                    alert_size = 4 if has_alert else 0
+                    drawer_size = 9 if state.drawer_expanded else 0
+                    footer_size = 1
+                    fixed_overhead = header_size + alert_size + drawer_size + footer_size
+
+                    term_h = console.height if (console.height and console.height >= 20) else 27
+                    table_size = max(6, term_h - fixed_overhead)
+                    v_size = max(2, table_size - 4)
 
                     if key == "UP":
                         if state.selected_index > 0:
