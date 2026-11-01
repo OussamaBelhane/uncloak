@@ -1,6 +1,6 @@
 """
 Terminal layout generator for the Uncloak interactive CUI cockpit.
-Implements the high-density telemetry matrix strictly adhering to the reference design.
+Implements the high-density telemetry matrix strictly adhering to global open-source standards.
 Zero AI emojis, zero column wrapping, and pixel-perfect monospace alignment.
 """
 
@@ -22,11 +22,13 @@ class FlowEntry:
     pid: int
     process_name: str
     is_signed: bool
+    src_ip: str
+    src_port: int
     dst_ip: str
     dst_port: int
     sni: str
     interval_str: str       # "8.4s", "Irregular", "15.0s", "Inactive"
-    sparkline: str          # "▄▆▅▆▇▅▆▆", "█ ▄ ▇  ▅", "── ──"
+    sparkline: str          # "▂▄▆▅▆▇▅█", "█ ▄ ▇  ▅", "── ──"
     jitter_str: str         # "±0.8s", "N/A"
     jitter_pct: str         # "9.5%", "7.3%", "N/A"
     payload_str: str        # "512 B", "3.8 KB"
@@ -37,6 +39,9 @@ class FlowEntry:
     binary_path: str = ""
     sig_info: str = "Unsigned PE"
     sha256: str = "e3b0c44298fc1c14..."
+    ja4_fingerprint: str = "t13d1516h2_8daaf6152771_0266e33433e9"
+    heuristic_signals: str = "Periodicity (0.99) │ Low Jitter (<3%)"
+    detection_reasons: str = "Direct IP (No SNI) │ Static 512B Beacon"
     bursts: str = "14 bursts / 2m"
     user_context: str = "CORP\\jdoe (Standard)"
     is_severed: bool = False
@@ -50,16 +55,16 @@ class FlowEntry:
 class CockpitState:
     """Current state of the interactive terminal cockpit."""
     flows: list[FlowEntry] = field(default_factory=list)
-    selected_index: int = 2  # Default to index 2 (PID 8830 powershell.exe) strictly matching reference
+    selected_index: int = 2  # Default to index 2 (PID 8830 powershell.exe) matching reference
     viewport_start: int = 0
     drawer_expanded: bool = True
     is_paused: bool = False
     filter_threats_only: bool = False
     search_query: Optional[str] = None
-    app_name: str = "BEACONHUNTER"
+    app_name: str = "UNCLOAK"
     version: str = "v1.0.0"
     host_name: str = "WIN-PROD-SRV01 (X64)"
-    bpf_filter: str = "TCP/443,8443"
+    bpf_filter: str = "tcp and (port 443 or 8443)"
     total_sockets: int = 124
     packet_rate: int = 151
     active_beacons: int = 1
@@ -69,7 +74,7 @@ class CockpitState:
 
 
 def render_header(state: CockpitState, width: int = 120) -> RenderableType:
-    """Builds the compact upper system banner matching the reference exactly."""
+    """Builds the upper system banner matching the reference with valid BPF grammar."""
     inner_w = max(80, width - 4)
 
     l = Text()
@@ -77,21 +82,21 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     l.append(f"{state.version}", style="bold #10b981")
     l.append(" │ ", style="#334155")
     l.append("HOST: ", style="#64748b")
-    if inner_w >= 138:
+    if inner_w >= 148:
         l.append("WIN-PROD-SRV01", style="bold white")
         l.append(" (X64)", style="#94a3b8")
-    elif inner_w >= 125:
+    elif inner_w >= 134:
         l.append("WIN-PROD-SRV01", style="bold white")
     else:
         l.append("WIN-PROD", style="bold white")
     l.append(" │ ", style="#334155")
     l.append("BPF: ", style="#64748b")
-    bpf_display = state.bpf_filter if inner_w >= 125 else "443,8443"
+
+    # Standard valid BPF grammar: tcp and (port 443 or 8443)
+    bpf_display = "tcp and (port 443 or 8443)"
     l.append(f"{bpf_display}", style="bold white")
     l.append(" │ ", style="#334155")
-    if inner_w >= 150:
-        l.append("TOTAL SOCKETS: ", style="#64748b")
-    elif inner_w >= 138:
+    if inner_w >= 144:
         l.append("SOCKETS: ", style="#64748b")
     else:
         l.append("SOCKS: ", style="#64748b")
@@ -102,16 +107,16 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     r.append(f"{state.cpu_percent:.1f}%", style="bold #10b981")
     r.append(" │ ", style="#334155")
     r.append("RAM: ", style="#64748b")
-    ram_str = f"{state.ram_mb:.1f} MB" if inner_w >= 125 else f"{state.ram_mb:.1f}M"
+    ram_str = f"{state.ram_mb:.1f} MB" if inner_w >= 134 else f"{state.ram_mb:.1f}M"
     r.append(ram_str, style="bold #10b981")
     r.append(" │ ", style="#334155")
     if state.is_paused:
         r.append("● PAUSED", style="bold #f59e0b")
     else:
-        active_str = "● ACTIVE (2s)" if inner_w >= 132 else "● ACTIVE"
+        active_str = "● ACTIVE (2s)" if inner_w >= 144 else "● ACTIVE"
         r.append(active_str, style="bold #10b981")
     r.append(" │ ", style="#334155")
-    siem_prefix = "SIEM: " if inner_w >= 125 else ""
+    siem_prefix = "SIEM: " if inner_w >= 138 else ""
     r.append(f"{siem_prefix}{state.siem_event}", style="bold #10b981")
 
     l_len = len(l.plain)
@@ -133,7 +138,7 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
 
 
 def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Optional[RenderableType]:
-    """Renders pinned MITRE ATT&CK alert strictly matching the reference."""
+    """Renders pinned MITRE ATT&CK alert strictly matching the reference with harmonious contrast."""
     if not top_threat or not top_threat.is_threat:
         return None
 
@@ -167,11 +172,16 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120) -> Op
     l2.append(f" ({top_threat.process_name})", style="#94a3b8")
 
     r2 = Text()
-    action_str = "ACTION: SetTcpEntry -> RST Injected" if inner_w >= 130 else "ACTION: SetTcpEntry -> RST"
-    r2.append(action_str, style="bold #10b981")
+    if top_threat.is_severed:
+        action_str = "ACTION: MIB_TCP_STATE_DELETE_TCB -> Socket Severed" if inner_w >= 140 else "ACTION: SetTcpEntry -> Severed"
+        eid_str = "EID 9002 Dispatched"
+    else:
+        action_str = "ACTION: SetTcpEntry Armed -> Press [K] to Sever" if inner_w >= 140 else "ACTION: Armed for [K]"
+        eid_str = "EID 9001 Dispatched"
+
+    r2.append(action_str, style="bold #38bdf8")
     r2.append("   ")
     r2.append("EVENT: ", style="#94a3b8")
-    eid_str = "EID 9002 Dispatched" if inner_w >= 130 else "EID 9002"
     r2.append(eid_str, style="bold white")
 
     sp2 = max(1, inner_w - len(l2.plain) - len(r2.plain))
@@ -326,16 +336,16 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
             # Payload
             c_pay = Text(flow.payload_str, style="white" if is_selected else "#94a3b8")
 
-            # Threat Score Badge
+            # Threat Score Badge - Uniform alignment across all tiers
             c_thr = Text()
             if flow.threat_score >= 0.90:
                 c_thr.append(f" {flow.threat_score * 100:.1f}% CRIT ", style="bold white on #dc2626")
             elif flow.threat_score >= 0.80:
                 c_thr.append(f" {flow.threat_score * 100:.1f}% HIGH ", style="bold white on #b91c1c")
             elif flow.threat_score >= 0.50:
-                c_thr.append(f" {flow.threat_score * 100:.1f}% MED ", style="bold black on #f59e0b")
+                c_thr.append(f" {flow.threat_score * 100:.1f}% MED  ", style="bold black on #f59e0b")
             else:
-                c_thr.append(f"{flow.threat_score * 100:.1f}% SAFE", style="bold #10b981")
+                c_thr.append(f"  {flow.threat_score * 100:.1f}% SAFE ", style="bold #10b981")
 
             # Row background style
             if is_threat:
@@ -364,13 +374,13 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     if not selected_flow:
         return Panel(Text("No session selected for inspection", style="dim center"), border_style="#1e293b")
 
-    # Top header line (standalone, NO outer panel border)
+    # Top header line with full 5-tuple socket pair (standalone, NO outer panel border)
     dt = Table.grid(expand=True)
     dt.add_column(no_wrap=True)
     dt.add_column(justify="right", no_wrap=True)
 
     dt_left = Text()
-    dt_left.append(f"DETAIL : {selected_flow.dst_ip}:{selected_flow.dst_port} ", style="bold #f59e0b")
+    dt_left.append(f"DETAIL : {selected_flow.src_ip}:{selected_flow.src_port} -> {selected_flow.dst_ip}:{selected_flow.dst_port} ", style="bold #f59e0b")
     dt_left.append(f"(PID {selected_flow.pid})", style="bold #f59e0b")
 
     dt_right = Text()
@@ -380,26 +390,35 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     dt.add_row(dt_left, dt_right)
 
-    # Card 1: Host Attribution (Green title [ HOST ATTRIBUTION ] in reference)
+    # Card 1: Host Attribution (Green title [ HOST ATTRIBUTION ])
     c1 = Text()
     c1.append("• PID       : ", style="#64748b")
     c1.append(f"{selected_flow.pid}\n", style="bold white")
     c1.append("• Process   : ", style="#64748b")
     proc_style = "bold #ef4444" if selected_flow.is_threat else "bold white"
     c1.append(f"{selected_flow.process_name}\n", style=proc_style)
-    c1.append("• Binary    :\n", style="#64748b")
+    c1.append("• Path      : ", style="#64748b")
     path_display = selected_flow.binary_path
-    if len(path_display) > 38:
+    if len(path_display) > 28:
         if "WindowsPowerShell" in path_display:
-            path_display = path_display[:25] + "..." + path_display[30:48] + "..."
+            path_display = r"C:\...\powershell.exe"
+        elif "WindowsApps" in path_display:
+            path_display = r"C:\...\teams.exe"
+        elif "AppData" in path_display:
+            path_display = r"C:\...\update.exe"
         else:
-            path_display = path_display[:18] + "..." + path_display[-15:]
-    c1.append(f"  {path_display}\n", style="#cbd5e1")
+            path_display = path_display[:12] + "..." + path_display[-12:]
+    c1.append(f"{path_display}\n", style="#cbd5e1")
     c1.append("• Signature : ", style="#64748b")
-    sig_style = "bold #ef4444" if not selected_flow.is_signed else "bold #10b981"
-    c1.append(f"{selected_flow.sig_info}\n", style=sig_style)
-    c1.append("• SHA256    : ", style="#64748b")
-    c1.append(f"{selected_flow.sha256[:16]}...", style="#64748b")
+    if selected_flow.is_signed:
+        sig_str = "MS Catalog Signed (✓)" if "Microsoft" in selected_flow.sig_info else f"{selected_flow.sig_info[:18]} (✓)"
+        c1.append(f"{sig_str}\n", style="bold #10b981")
+    else:
+        c1.append("Unsigned PE (In-Memory)\n", style="bold #ef4444")
+    c1.append("• JA4       : ", style="#64748b")
+    c1.append(f"{selected_flow.ja4_fingerprint[:18]}...\n", style="#94a3b8")
+    c1.append("• User      : ", style="#64748b")
+    c1.append(f"{selected_flow.user_context[:24]}", style="#cbd5e1")
 
     p1 = Panel(
         c1,
@@ -410,14 +429,22 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         padding=(0, 1),
     )
 
-    # Card 2: Cadence & Timing (Amber title [ CADENCE & TIMING ] in reference)
+    # Card 2: Cadence & Timing (Amber title [ CADENCE & TIMING ])
     c2 = Text()
     c2.append("• Interval  : ", style="#64748b")
-    c2.append(f"{selected_flow.interval_str} ", style="bold #f59e0b")
+    int_style = "bold #f59e0b" if selected_flow.is_threat else "bold white"
+    c2.append(f"{selected_flow.interval_str} ", style=int_style)
     c2.append(f"({selected_flow.jitter_str})\n", style="#64748b")
     c2.append("• Heartbeat : ", style="#64748b")
-    hb_style = "bold #10b981" if selected_flow.is_severed else ("bold #ef4444" if selected_flow.is_threat else "bold #10b981")
-    hb_text = "SEVERED (Stack Killed)" if selected_flow.is_severed else ("ACTIVE (C2 Live)" if selected_flow.is_threat else "RANDOMIZED")
+    if selected_flow.is_severed:
+        hb_style = "bold #10b981"
+        hb_text = "SEVERED (Stack Killed)"
+    elif selected_flow.is_threat:
+        hb_style = "bold #ef4444"
+        hb_text = "ACTIVE (C2 Live)"
+    else:
+        hb_style = "bold #10b981"
+        hb_text = "RANDOM (Human Flow)"
     c2.append(f"{hb_text}\n", style=hb_style)
     c2.append("• Pulse     : ", style="#64748b")
     spark_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
@@ -426,8 +453,8 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     c2.append("• Payload   : ", style="#64748b")
     c2.append(f"{selected_flow.payload_str} ", style="bold white")
     c2.append(f"({'Fixed' if selected_flow.is_threat else 'Dynamic'})\n", style="#64748b")
-    c2.append("• Bursts    : ", style="#64748b")
-    c2.append(f"{selected_flow.bursts}\n", style="#cbd5e1")
+    c2.append("• Signals   : ", style="#64748b")
+    c2.append(f"{selected_flow.heuristic_signals[:26]}\n", style="#cbd5e1")
     c2.append("• Jitter    : ", style="#64748b")
     jitter_style = "bold #ef4444" if selected_flow.is_threat else "#10b981"
     c2.append(f"{selected_flow.jitter_pct} ", style=jitter_style)
@@ -442,21 +469,50 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
         padding=(0, 1),
     )
 
-    # Card 3: Forensic & MITRE (Cyan title [ FORENSIC & MITRE ] in reference)
+    # Card 3: Forensic & MITRE (Cyan title [ FORENSIC & MITRE ])
     c3 = Text()
-    c3.append("• MITRE   : ", style="#64748b")
-    c3.append(f"{selected_flow.mitre_technique}\n", style="bold white")
-    c3.append("• API     : ", style="#64748b")
-    c3.append("SetTcpEntry\n", style="bold #06b6d4")
-    c3.append("• Action  : ", style="#64748b")
-    c3.append("TCP RST Injected Stack\n", style="bold #10b981")
-    c3.append("• State   : ", style="#64748b")
-    c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
-    c3.append("• Audit   : ", style="#64748b")
-    c3.append("SQLite #142 ", style="#cbd5e1")
-    c3.append("│ ", style="#334155")
-    c3.append("EID 9002\n", style="#cbd5e1")
-    c3.append(" ", style="dim")
+    if selected_flow.is_threat:
+        if selected_flow.is_severed:
+            c3.append("• MITRE     : ", style="#64748b")
+            c3.append("T1059.001 (PowerShell)\n", style="bold white")
+            c3.append("• API       : ", style="#64748b")
+            c3.append("SetTcpEntry (TCB Delete)\n", style="bold #06b6d4")
+            c3.append("• Action    : ", style="#64748b")
+            c3.append("Kernel Stack Cleared\n", style="bold #10b981")
+            c3.append("• State     : ", style="#64748b")
+            c3.append("SEVERED (Host Clean)\n", style="bold #10b981")
+            c3.append("• Audit     : ", style="#64748b")
+            c3.append(f"SQLite #{selected_flow.flow_id} │ EID 9002\n", style="#cbd5e1")
+            c3.append("• Status    : ", style="#64748b")
+            c3.append("Mitigation Complete", style="bold #10b981")
+        else:
+            c3.append("• MITRE     : ", style="#64748b")
+            mitre_disp = selected_flow.mitre_technique[:24] if selected_flow.mitre_technique else "T1071.001 (Web C2)"
+            c3.append(f"{mitre_disp}\n", style="bold white")
+            c3.append("• API       : ", style="#64748b")
+            c3.append("SetTcpEntry (Armed)\n", style="bold #f59e0b")
+            c3.append("• Action    : ", style="#64748b")
+            c3.append("Persistent C2 Isolated\n", style="bold #ef4444")
+            c3.append("• State     : ", style="#64748b")
+            c3.append("ESTABLISHED (C2 Active)\n", style="bold #ef4444")
+            c3.append("• Audit     : ", style="#64748b")
+            c3.append(f"SQLite #{selected_flow.flow_id} │ EID 9001\n", style="#cbd5e1")
+            c3.append("• Status    : ", style="#64748b")
+            c3.append("Press [K] to Sever", style="bold #f59e0b")
+    else:
+        # BENIGN FLOW - Authenticated enterprise process
+        c3.append("• MITRE     : ", style="#64748b")
+        c3.append("None (Benign Profile)\n", style="bold #10b981")
+        c3.append("• Engine    : ", style="#64748b")
+        c3.append("Npcap BPF Sniffer\n", style="bold #06b6d4")
+        c3.append("• Action    : ", style="#64748b")
+        c3.append("Permitted (Baseline)\n", style="bold #10b981")
+        c3.append("• State     : ", style="#64748b")
+        c3.append("ESTABLISHED (Flowing)\n", style="bold #10b981")
+        c3.append("• Audit     : ", style="#64748b")
+        c3.append(f"Telemetry #{selected_flow.flow_id} │ Baseline\n", style="#cbd5e1")
+        c3.append("• Status    : ", style="#64748b")
+        c3.append("Allowlisted Baseline", style="bold #10b981")
 
     p3 = Panel(
         c3,
@@ -490,25 +546,25 @@ def render_footer(state: CockpitState) -> RenderableType:
     grid.add_row("")
 
     footer_grid = Table.grid(expand=True)
-    footer_grid.add_column(ratio=6)
-    footer_grid.add_column(ratio=1, justify="right")
+    footer_grid.add_column(no_wrap=True)
+    footer_grid.add_column(justify="right", no_wrap=True)
 
     fl = Text()
     fl.append(" ↑/↓ ", style="bold white on #1e293b")
-    fl.append("Select   ", style="#94a3b8")
+    fl.append("Select  ", style="#94a3b8")
     fl.append(" ENTER ", style="bold white on #1e293b")
-    fl.append("Detail   ", style="#94a3b8")
+    fl.append("Detail  ", style="#94a3b8")
     fl.append(" / ", style="bold #06b6d4 on #1e293b")
-    fl.append("Search   ", style="#94a3b8")
+    fl.append("Search  ", style="#94a3b8")
     fl.append(" S ", style="bold #f59e0b on #1e293b")
-    fl.append("Sort   ", style="#94a3b8")
+    fl.append("Sort  ", style="#94a3b8")
     fl.append(" K ", style="bold #ef4444 on #1e293b")
-    fl.append("Kill   ", style="#94a3b8")
+    fl.append("Sever  ", style="#94a3b8")
     fl.append(" SPACE ", style="bold white on #1e293b")
-    pause_label = "Pause   " if not state.is_paused else "Resume  "
+    pause_label = "Pause  " if not state.is_paused else "Resume "
     fl.append(pause_label, style="#94a3b8")
     fl.append(" F ", style="bold white on #1e293b")
-    filter_label = "Filter   " if not state.filter_threats_only else "All   "
+    filter_label = "Threats  " if not state.filter_threats_only else "All  "
     fl.append(filter_label, style="#94a3b8")
     fl.append(" E ", style="bold white on #1e293b")
     fl.append("PCAP", style="#94a3b8")

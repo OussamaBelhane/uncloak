@@ -1,7 +1,7 @@
 """
 Interactive live runner and event loop for the Uncloak CUI cockpit.
-Handles non-blocking cross-platform keyboard input and zero-flicker rendering.
-Strictly mirrors the HTML master architecture.
+Handles non-blocking cross-platform keyboard input, live psutil resource telemetry,
+and zero-flicker rendering strictly adhering to global open-source cybersecurity standards.
 """
 
 import os
@@ -9,6 +9,7 @@ import sys
 import time
 from typing import Optional
 
+import psutil
 from rich.console import Console
 from rich.live import Live
 
@@ -16,13 +17,15 @@ from uncloak.ui.layout import CockpitState, FlowEntry, build_cockpit_layout
 
 
 def get_demo_flows() -> list[FlowEntry]:
-    """Generates realistic demonstration flows matching the HTML master specification."""
+    """Generates high-fidelity demonstration telemetry matching the master architecture."""
     return [
         FlowEntry(
             flow_id="f1",
             pid=5824,
             process_name="update.exe",
             is_signed=False,
+            src_ip="10.0.0.15",
+            src_port=49152,
             dst_ip="193.26.158.114",
             dst_port=443,
             sni="",
@@ -36,12 +39,15 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=True,
             c2_framework="Sliver C2",
             binary_path=r"C:\Users\Target\AppData\Roaming\update.exe",
-            sig_info="Unsigned PE",
+            sig_info="Unsigned PE (In-Memory Hollowed)",
             sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
+            heuristic_signals="Periodicity (0.99) │ Low Jitter (9.5%)",
+            detection_reasons="Direct IP (No SNI) │ Static 512B Beacon",
             bursts="14 bursts / 2m",
             user_context=r"CORP\jdoe (Standard)",
             is_severed=False,
-            mitre_technique="T1071.001 (Web C2)",
+            mitre_technique="T1071.001 (Web C2: HTTPS)",
             state="ESTABLISHED",
             packets=182,
             bytes_transferred=51688,
@@ -50,7 +56,9 @@ def get_demo_flows() -> list[FlowEntry]:
             flow_id="f2",
             pid=6712,
             process_name="rundll32.exe",
-            is_signed=False,
+            is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=49210,
             dst_ip="45.33.32.156",
             dst_port=8443,
             sni="cdn-azure-edge.net",
@@ -65,11 +73,14 @@ def get_demo_flows() -> list[FlowEntry]:
             c2_framework="Cobalt Strike",
             binary_path=r"C:\Windows\System32\rundll32.exe",
             sig_info="Microsoft Windows (Proxy Exec)",
-            sha256="7c12bf9810ac9b32e144a10f8bc9910cde4279ab",
+            sha256="7c12bf9810ac9b32e144a10f8bc9910cde4279ab2281a8c3d9a102ffbc41238a",
+            ja4_fingerprint="t13d190800_261546b3f71c_f601b1a77409",
+            heuristic_signals="High Periodicity (0.94) │ Uniform Payload",
+            detection_reasons="Malleable C2 Profile │ Host Header Mismatch",
             bursts="8 bursts / 2m",
             user_context=r"CORP\jdoe (Standard)",
             is_severed=False,
-            mitre_technique="T1218.011 (Rundll32)",
+            mitre_technique="T1218.011 (Signed Binary Proxy: Rundll32)",
             state="ESTABLISHED",
             packets=96,
             bytes_transferred=24576,
@@ -78,7 +89,9 @@ def get_demo_flows() -> list[FlowEntry]:
             flow_id="f3",
             pid=8830,
             process_name="powershell.exe",
-            is_signed=False,
+            is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=49722,
             dst_ip="185.220.101.5",
             dst_port=443,
             sni="api.telemetry-host.org",
@@ -92,13 +105,16 @@ def get_demo_flows() -> list[FlowEntry]:
             is_threat=True,
             c2_framework="Empire C2",
             binary_path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-            sig_info="Microsoft Windows",
-            sha256="99182abfc012781bcf4401a998bc41270ae19b88",
+            sig_info="Microsoft Windows (Catalog Signed)",
+            sha256="99182abfc012781bcf4401a998bc41270ae19b88ef128456187900bba037b341",
+            ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
+            heuristic_signals="Periodicity (0.99) │ Low Jitter (<3%)",
+            detection_reasons="Direct IP (No SNI) │ Static 768B Beacon",
             bursts="5 bursts / 5m",
             user_context=r"CORP\jdoe (Standard)",
             is_severed=True,
-            mitre_technique="T1059.001 (PowerShell C2)",
-            state="ESTABLISHED",
+            mitre_technique="T1059.001 (Command and Scripting: PowerShell)",
+            state="SEVERED (Host Clean)",
             packets=45,
             bytes_transferred=14336,
         ),
@@ -107,6 +123,8 @@ def get_demo_flows() -> list[FlowEntry]:
             pid=1024,
             process_name="teams.exe",
             is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=50114,
             dst_ip="52.114.63.56",
             dst_port=443,
             sni="*.teams.microsoft.com",
@@ -118,13 +136,17 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.008,
             threat_label="SAFE",
             is_threat=False,
+            c2_framework=None,
             binary_path=r"C:\Program Files\WindowsApps\teams.exe",
-            sig_info="Microsoft Corp",
-            sha256="b148fa0172e04f9810bb4260aa781fbc02419a",
+            sig_info="Microsoft Corporation",
+            sha256="b148fa0172e04f9810bb4260aa781fbc02419a45610099881122334455667788",
+            ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
+            heuristic_signals="High Entropy Flow │ Aperiodic User Cadence",
+            detection_reasons="Valid PKI Signature │ Enterprise Allowlist",
             bursts="Asynchronous",
             user_context=r"CORP\jdoe (Standard)",
             is_severed=False,
-            mitre_technique="None (Benign Process)",
+            mitre_technique="None (Allowlisted Collaboration Suite)",
             state="ESTABLISHED",
             packets=1420,
             bytes_transferred=584200,
@@ -134,6 +156,8 @@ def get_demo_flows() -> list[FlowEntry]:
             pid=2023,
             process_name="svchost.exe",
             is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=50228,
             dst_ip="20.189.139.81",
             dst_port=443,
             sni="*.azure.com",
@@ -145,13 +169,17 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.008,
             threat_label="SAFE",
             is_threat=False,
+            c2_framework=None,
             binary_path=r"C:\Windows\System32\svchost.exe",
-            sig_info="Microsoft Windows",
-            sha256="5a1098b10ef3341b8a99002477cbb14002fa10",
+            sig_info="Microsoft Windows (Catalog Signed)",
+            sha256="5a1098b10ef3341b8a99002477cbb14002fa1098112233445566778899aabbcc",
+            ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
+            heuristic_signals="Low Frequency Polling │ Non-repetitive Length",
+            detection_reasons="Operating System Kernel Service Baseline",
             bursts="Asynchronous",
             user_context=r"NT AUTHORITY\SYSTEM",
             is_severed=False,
-            mitre_technique="None (Benign Process)",
+            mitre_technique="None (Core Windows Service)",
             state="ESTABLISHED",
             packets=320,
             bytes_transferred=182400,
@@ -161,6 +189,8 @@ def get_demo_flows() -> list[FlowEntry]:
             pid=3614,
             process_name="docker.exe",
             is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=50352,
             dst_ip="104.244.136.16",
             dst_port=443,
             sni="registry.docker.io",
@@ -172,13 +202,17 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.008,
             threat_label="SAFE",
             is_threat=False,
+            c2_framework=None,
             binary_path=r"C:\Program Files\Docker\docker.exe",
             sig_info="Docker Inc.",
-            sha256="89acbf0198aa47b60214ee00b891bcfa0014a",
+            sha256="89acbf0198aa47b60214ee00b891bcfa0014a5566778899aabbccddeeff00112",
+            ja4_fingerprint="t13d1516h2_8daaf6152771_c2140bb063ea",
+            heuristic_signals="Standard TLS Hello │ Normal HTTP Keep-Alive",
+            detection_reasons="Verified Container Runtime Registry Sync",
             bursts="2 bursts / 5m",
             user_context=r"NT AUTHORITY\SYSTEM",
             is_severed=False,
-            mitre_technique="None (Benign Process)",
+            mitre_technique="None (Verified Developer Tooling)",
             state="ESTABLISHED",
             packets=84,
             bytes_transferred=68880,
@@ -188,6 +222,8 @@ def get_demo_flows() -> list[FlowEntry]:
             pid=9216,
             process_name="chrome.exe",
             is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=50480,
             dst_ip="142.250.200.35",
             dst_port=443,
             sni="*.1e100.net",
@@ -199,13 +235,17 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.002,
             threat_label="SAFE",
             is_threat=False,
+            c2_framework=None,
             binary_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             sig_info="Google LLC",
-            sha256="3b49f281e05a88c42b9100fae91845bb02",
+            sha256="3b49f281e05a88c42b9100fae91845bb0299887766554433221100ffeeddccbb",
+            ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
+            heuristic_signals="High Bandwidth Stream │ Bursty User Activity",
+            detection_reasons="Commercial Web Browser Baseline",
             bursts="Asynchronous",
             user_context=r"CORP\jdoe (Standard)",
             is_severed=False,
-            mitre_technique="None (Benign Process)",
+            mitre_technique="None (Standard User Web Navigation)",
             state="ESTABLISHED",
             packets=4210,
             bytes_transferred=1602480,
@@ -215,6 +255,8 @@ def get_demo_flows() -> list[FlowEntry]:
             pid=4118,
             process_name="msedge.exe",
             is_signed=True,
+            src_ip="10.0.0.15",
+            src_port=50596,
             dst_ip="204.79.197.200",
             dst_port=443,
             sni="*.bing.com",
@@ -226,13 +268,17 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.001,
             threat_label="SAFE",
             is_threat=False,
+            c2_framework=None,
             binary_path=r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-            sig_info="Microsoft Corp",
-            sha256="88f1c30291ba44c80112aa8944cc9921b7",
+            sig_info="Microsoft Corporation",
+            sha256="88f1c30291ba44c80112aa8944cc9921b77766554433221100ffeeddccbbaa99",
+            ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
+            heuristic_signals="Search Engine Telemetry │ Interactive Sessions",
+            detection_reasons="Operating System Default Browser",
             bursts="Asynchronous",
             user_context=r"CORP\jdoe (Standard)",
             is_severed=False,
-            mitre_technique="None (Benign Process)",
+            mitre_technique="None (Standard User Web Navigation)",
             state="ESTABLISHED",
             packets=2104,
             bytes_transferred=819200,
@@ -287,21 +333,46 @@ class NonBlockingKeyboard:
 
 
 def run_cockpit(demo_mode: bool = True) -> int:
-    """Executes the interactive terminal event loop."""
+    """Executes the interactive terminal event loop with live psutil telemetry."""
     console = Console()
     state = CockpitState(flows=get_demo_flows())
     kb = NonBlockingKeyboard()
 
+    # Track host process metrics via psutil
     try:
-        with Live(build_cockpit_layout(state, width=console.width, height=console.height), console=console, refresh_per_second=2, screen=True) as live:
+        proc = psutil.Process()
+        proc.cpu_percent()  # Seed initial sample
+    except Exception:
+        proc = None
+    last_metric_update = 0.0
+
+    try:
+        with Live(
+            build_cockpit_layout(state, width=console.width, height=console.height),
+            console=console,
+            refresh_per_second=4,
+            screen=True,
+        ) as live:
             while True:
-                # Poll non-blocking keyboard input
+                # 1. Update real process telemetry every second
+                now = time.time()
+                if proc and (now - last_metric_update >= 1.0):
+                    try:
+                        cpu_val = proc.cpu_percent()
+                        ram_val = proc.memory_info().rss / (1024 * 1024)
+                        state.cpu_percent = round(cpu_val, 1)
+                        state.ram_mb = round(ram_val, 1)
+                    except Exception:
+                        pass
+                    last_metric_update = now
+
+                # 2. Poll non-blocking keyboard input
                 key = kb.read_key()
                 if key:
                     key_lower = key.lower()
                     if key_lower in ("q", "\x03"):  # Quit on Q or Ctrl+C
                         break
-                    
+
                     visible_flows = [f for f in state.flows if f.is_threat] if state.filter_threats_only else state.flows
                     total_visible = len(visible_flows)
                     has_alert = any(f.is_threat for f in state.flows)
@@ -339,11 +410,15 @@ def run_cockpit(demo_mode: bool = True) -> int:
                             if target.is_threat:
                                 target.is_severed = True
                                 target.state = "SEVERED (Host Clean)"
-                                state.active_beacons = max(0, state.active_beacons - 1)
+                                state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
+                                state.siem_event = "EID 9002 (Severed)"
+                    elif key_lower == "e":  # Export PCAP simulation
+                        state.siem_event = "PCAP Exported: capture.pcap"
 
-                # Subtle simulated live packet ticks if not paused
+                # 3. Dynamic active beacon calculation & packet rates
                 if not state.is_paused and demo_mode:
                     state.packet_rate = 145 + int(time.time() * 2) % 12
+                    state.active_beacons = sum(1 for f in state.flows if f.is_threat and not f.is_severed)
 
                 live.update(build_cockpit_layout(state, width=console.width, height=console.height))
                 time.sleep(0.05)
