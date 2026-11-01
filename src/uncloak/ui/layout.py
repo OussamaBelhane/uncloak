@@ -202,8 +202,8 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
 
     # Sub-Header bar
     sub_header = Table.grid(expand=True)
-    sub_header.add_column(ratio=1)
-    sub_header.add_column(ratio=1, justify="right")
+    sub_header.add_column(no_wrap=True)
+    sub_header.add_column(justify="right", no_wrap=True)
 
     sh_left = Text()
     sh_left.append(f"ACTIVE FLOWS ({state.total_sockets})", style="bold white")
@@ -214,9 +214,28 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
     curr_pos = min(total, state.selected_index + 1) if total > 0 else 0
     sh_right.append(f"[ {curr_pos}/{state.total_sockets} ]", style="bold #06b6d4")
     sh_right.append(" │ ", style="#334155")
-    scroll_pct = 0 if total <= v_size else int((start / max(1, total - v_size)) * 100)
-    scroll_label = "[ Top ]" if scroll_pct == 0 else ("[ Bottom ]" if scroll_pct >= 100 else f"[ {scroll_pct}% ]")
-    sh_right.append(scroll_label, style="#64748b")
+
+    # Dynamic scrollbar track & thumb (relocated from sub-footer)
+    total_items = max(total, state.total_sockets) if state.total_sockets > 0 else max(1, total)
+    v_count = len(slice_flows)
+    if total > v_count and total > 0:
+        pct_val = max(8, min(100, int(round((start + v_count) / total_items * 100))))
+        max_offset = 14
+        offset = min(max_offset, int((start / max(1, total - v_count)) * max_offset))
+        track_before = "─" * offset
+        track_after = "─" * (max_offset - offset)
+    else:
+        pct_val = 8
+        track_before = ""
+        track_after = "──────────────"
+
+    sh_right.append("Scroll: ", style="#64748b")
+    if track_before:
+        sh_right.append(track_before, style="#1e293b")
+    sh_right.append("▬▬", style="bold #06b6d4")
+    if track_after:
+        sh_right.append(track_after, style="#1e293b")
+    sh_right.append(f" {pct_val}%", style="#64748b")
     sh_right.append(" │ ", style="#334155")
     sh_right.append("[ENTER] Toggle Drawer", style="#94a3b8")
 
@@ -297,36 +316,11 @@ def render_table(state: CockpitState, width: int = 120) -> RenderableType:
 
             table.add_row(c_pid, c_proc, c_dst, c_sni, c_int, c_pay, c_thr, style=row_bg)
 
-    # Sub-Footer scrollbar track with keycap styling
-    sub_footer = Table.grid(expand=True)
-    sub_footer.add_column(ratio=1)
-    sub_footer.add_column(ratio=1, justify="right")
-
-    sf_left = Text()
-    sf_left.append("Scroll: ", style="#64748b")
-    sf_left.append("▬▬", style="bold #06b6d4")
-    sf_left.append("────────────── ", style="#1e293b")
-    pct_val = scroll_pct if scroll_pct > 0 else 8
-    sf_left.append(f"{pct_val}%", style="#64748b")
-
-    sf_right = Text()
-    sf_right.append("Navigate: ", style="#64748b")
-    sf_right.append(" ↑/↓ ", style="bold white on #1e293b")
-    sf_right.append(" or ", style="#64748b")
-    sf_right.append(" PgUp/PgDn ", style="bold white on #1e293b")
-    sf_right.append("   ")
-    sf_right.append("Top/Bottom: ", style="#64748b")
-    sf_right.append(" Home/End ", style="bold white on #1e293b")
-
-    sub_footer.add_row(sf_left, sf_right)
-
     container = Table.grid(expand=True)
     container.add_column()
     container.add_row(sub_header)
     container.add_row(Text(""))
     container.add_row(table)
-    container.add_row(Text(""))
-    container.add_row(sub_footer)
 
     return Panel(
         container,
@@ -506,18 +500,20 @@ def build_cockpit_layout(state: CockpitState, width: int = 120) -> Layout:
     pinned_alert = render_pinned_alert(top_threat, width=width)
 
     if pinned_alert:
+        table_size = 11 if state.drawer_expanded else 17
         root.split_column(
             Layout(name="header", size=3),
             Layout(name="alert", size=4),
-            Layout(name="main_table", size=13),
+            Layout(name="main_table", size=table_size),
             Layout(name="drawer", size=11 if state.drawer_expanded else 0),
             Layout(name="footer", size=3),
         )
         root["alert"].update(pinned_alert)
     else:
+        table_size = 15 if state.drawer_expanded else 21
         root.split_column(
             Layout(name="header", size=3),
-            Layout(name="main_table", size=17),
+            Layout(name="main_table", size=table_size),
             Layout(name="drawer", size=11 if state.drawer_expanded else 0),
             Layout(name="footer", size=3),
         )
