@@ -51,6 +51,9 @@ class FlowEntry:
     bytes_transferred: int = 40960
     command_line: str = ""
     parent_process: str = ""
+    first_seen: str = "2026-11-02 14:10:02"
+    last_seen: str = "2026-11-02 14:26:45"
+    duration: str = "16m 43s"
 
 
 @dataclass
@@ -392,7 +395,7 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
             else:
                 proc_style = "bold white" if is_selected else "white"
             c_proc.append(f"{flow.process_name} ", style=proc_style)
-            tag = "✓" if flow.is_signed else "!"
+            tag = "[SIGNED]" if flow.is_signed else "!"
             if is_severed:
                 tag_style = "#64748b"
             elif flow.is_signed:
@@ -548,7 +551,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     sha_disp = selected_flow.sha256[:14] + ".." if len(selected_flow.sha256) > 14 else selected_flow.sha256
     c1.append(f"{sha_disp}\n", style="#94a3b8")
     c1.append("• Parent  : ", style="#64748b")
-    parent_disp = selected_flow.parent_process.split(" -> ")[0] if selected_flow.parent_process else "services.exe"
+    parent_disp = selected_flow.parent_process.replace(" ? ", " -> ").split(" -> ")[0] if selected_flow.parent_process else "services.exe"
     if len(parent_disp) > 18:
         parent_disp = parent_disp[:16] + ".."
     c1.append(f"{parent_disp}", style="#cbd5e1")
@@ -730,7 +733,7 @@ def render_dossier_modal(flow: Optional[FlowEntry], width: int = 120) -> Rendera
 
     body.append("• Authenticode   : ", style="#64748b")
     sig_style = "bold #10b981" if flow.is_signed else "bold #ef4444"
-    sig_text = f"{flow.sig_info} (Verified CA Signature)" if flow.is_signed else "Unsigned PE (In-Memory Hollowed / Process Hollowing Detected)"
+    sig_text = f"{flow.sig_info} (Verified CA Signature)" if flow.is_signed else f"{flow.sig_info} (Heuristic Alert)"
     body.append(f"{sig_text}\n", style=sig_style)
 
     body.append("• SHA-256 Hash   : ", style="#64748b")

@@ -79,3 +79,27 @@ uncloak_dossier_*.json
 *.swo
 *~
 .DS_Store
+
+# Scratch artifacts, local screenshots, and node testing
+*.png
+*.html
+*.js
+node_modules/
+package.json
+package-lock.json
+audit_results.json
+test_state.json
+scratch_build_*.py
+check_*.py
+fix_*.py
+add_*.py
+insert_*.py
+expand_*.py
+apply_*.py
+capture_*.py
+purge_emojis.py
+inspect_*.py
+debug_*.py
+do_insert_filters.py
+generate_fresh_test_render.py
+update_test.py

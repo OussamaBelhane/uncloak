@@ -1,5 +1,5 @@
 """
-POSIX-compliant argument parser for Uncloak.
+POSIX-compliant argument parser for Uncloak Enterprise.
 """
 
 import argparse
@@ -18,11 +18,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-v", "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version="%(prog)s 0.1.0 (Enterprise Architecture)",
     )
     
+    # Optional positional subcommand for clean ergonomic CLI (e.g. 'uncloak manager', 'uncloak agent')
+    parser.add_argument(
+        "subcommand",
+        nargs="?",
+        choices=["manager", "agent", "gui", "cli", "hunt"],
+        default=None,
+        help="Subcommand mode: manager (Fleet Dashboard), agent (Endpoint Daemon), cli/hunt (Terminal TUI)",
+    )
+
     # Execution modes
     mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--manager",
+        action="store_true",
+        help="Start the Uncloak Enterprise Central Fleet Manager web dashboard and API",
+    )
+    mode_group.add_argument(
+        "--agent",
+        action="store_true",
+        help="Start the headless Uncloak Endpoint Agent background daemon",
+    )
     mode_group.add_argument(
         "--live",
         action="store_true",
@@ -76,6 +95,23 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Path to embedded SQLite telemetry database (default: uncloak.db)",
     )
+
+    # Windows Startup Service Lifecycle
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Install Uncloak Agent as a silent background Windows daemon starting automatically on PC boot",
+    )
+    parser.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove Uncloak Agent background daemon from Windows startup",
+    )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Check the running status of the background Windows agent service",
+    )
     
     return parser
 
@@ -89,12 +125,38 @@ def main(args: Optional[list[str]] = None) -> int:
         print(f"[*] Uncloak v0.1.0 headless NDJSON streaming initialized (Filter: '{parsed_args.filter}')")
         return 0
 
-    if parsed_args.cli:
+    if parsed_args.install:
+        from uncloak.agent.service import install_windows_service
+        return 0 if install_windows_service() else 1
+
+    if parsed_args.uninstall:
+        from uncloak.agent.service import uninstall_windows_service
+        return 0 if uninstall_windows_service() else 1
+
+    if parsed_args.status:
+        from uncloak.agent.service import query_service_status
+        query_service_status()
+        return 0
+
+    is_agent = parsed_args.agent or parsed_args.subcommand == "agent"
+    is_manager = parsed_args.manager or parsed_args.subcommand == "manager"
+    is_cli = parsed_args.cli or parsed_args.subcommand in ("cli", "hunt")
+    is_gui = parsed_args.gui or parsed_args.subcommand == "gui"
+
+    if is_agent:
+        from uncloak.agent.service import UncloakAgentService
+        agent = UncloakAgentService()
+        print(f"[*] Uncloak Silent Endpoint Agent initialized on [{agent.hostname}]")
+        print(f"[*] Connecting to Manager at {agent.manager_url} (Heartbeat: 15s)...")
+        agent.start(daemon=False)
+        return 0
+
+    if is_cli:
         from uncloak.ui.cockpit import run_cockpit
         return run_cockpit(demo_mode=True)
 
-    if parsed_args.gui or (sys.platform == "win32" and not parsed_args.cli):
-        # Default on Windows desktop is the dedicated WebView2 Desktop Cockpit window
+    if is_manager or is_gui or (sys.platform == "win32" and not is_cli):
+        # Default on Windows desktop or when manager is requested
         from uncloak.ui.desktop import launch_desktop
         return launch_desktop()
 

@@ -1,5 +1,5 @@
 """
-Core data models and contracts for Uncloak.
+Core data models and contracts for Uncloak Enterprise.
 """
 
 from dataclasses import dataclass, field
@@ -73,3 +73,37 @@ class ThreatAlert:
     dst_port: int
     sni: Optional[str] = None
     recommended_action: str = "INSPECT"
+
+
+@dataclass
+class HostEndpoint:
+    """Represents an enterprise machine monitored by an Uncloak Agent."""
+    host_id: str
+    hostname: str
+    ip_address: str
+    subnet: str
+    os_version: str
+    agent_version: str
+    status: str  # ONLINE, DEGRADED, MUTED
+    last_heartbeat: float
+    threat_level: str  # CRITICAL, HIGH, EVALUATING, HEALTHY
+    threat_score: float
+    active_sockets_count: int
+    isolated_beacons_count: int
+    c2_framework: Optional[str] = None
+    cpu_percent: float = 0.8
+    ram_mb: float = 7.5
+
+
+@dataclass
+class CampaignCluster:
+    """Correlates multiple enterprise endpoints exhibiting identical C2 signatures."""
+    campaign_id: str
+    name: str
+    c2_framework: str
+    ja4_fingerprint: str
+    cadence_profile: str
+    affected_hosts: list[str]
+    target_destination: str
+    threat_score: float
+    status: str = "ACTIVE_INTRUSION"  # ACTIVE_INTRUSION, CONTAINED

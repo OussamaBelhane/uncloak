@@ -61,6 +61,8 @@ build = [
 
 [project.scripts]
 uncloak = "uncloak.cli.parser:main"
+uncloak-agent = "uncloak.agent.service:main"
+uncloak-manager = "uncloak.ui.desktop:main"
 
 [project.urls]
 Homepage = "https://github.com/uncloak-project/uncloak"
