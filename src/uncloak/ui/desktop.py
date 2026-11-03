@@ -377,7 +377,7 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>UNCLOAK :: Enterprise Fleet Threat Hunting & C2 Defense</title>
+<title>UNCLOAK :: C2 Threat Hunting & Host Attribution Engine</title>
 <style>
   :root {
     --bg-base: #060913;
@@ -1279,13 +1279,13 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
   <header>
     <div class="brand-group">
       <div class="brand-logo">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="var(--cyan)"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 16h2v2h-2zm0-6h2v4h-2z"/></svg>
-        UNCLOAK // ENTERPRISE EDR
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="var(--cyan)"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/></svg>
+        UNCLOAK <span style="color: var(--text-dim); font-size: 0.85em; font-weight: 600;">// C2 THREAT HUNTING</span>
       </div>
       <div class="nav-tabs">
         <button class="nav-tab-btn active" id="tab-fleet" onclick="switchView('fleet')">[1] FLEET THREAT MATRIX</button>
         <button class="nav-tab-btn" id="tab-campaign" onclick="switchView('campaign')">[2] CAMPAIGN CORRELATION</button>
-        <button class="nav-tab-btn" id="tab-drilldown" onclick="switchView('drilldown')">[3] HOST FORENSIC DRILL-DOWN</button>
+        <button class="nav-tab-btn" id="tab-drilldown" onclick="switchView('drilldown')">[3] HOST INVESTIGATION & LIVE TRIAGE</button>
       </div>
     </div>
 
@@ -1419,7 +1419,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       </div>
     </div>
 
-    <!-- VIEW 3: HOST FORENSIC DRILL-DOWN -->
+    <!-- VIEW 3: HOST INVESTIGATION & LIVE TRIAGE -->
     <div class="view-panel" id="view-drilldown">
       <div class="staleness-banner" id="staleness-alert-banner"></div>
       <div class="drilldown-bar">
@@ -2247,7 +2247,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
           <td>${h.c2_framework ? `<span style="color: #f87171; font-weight: 700;">${h.c2_framework}</span>` : '<span style="color: var(--text-muted); font-size: 11px;">Baseline Clean</span>'}</td>
           <td style="font-size: 10px; color: var(--text-dim);">${staleText}</td>
           <td style="text-align: center; white-space: nowrap;">
-            <button class="action-btn" onclick="event.stopPropagation(); selectAndDrilldown('${h.host_id}')" style="padding: 2px 7px; margin-right: 4px;">Forensics</button>
+            <button class="action-btn" onclick="event.stopPropagation(); selectAndDrilldown('${h.host_id}')" style="padding: 2px 7px; margin-right: 4px;">Investigate</button>
             <button class="action-btn ${isIso ? '' : 'danger'}" onclick="event.stopPropagation(); toggleHostIsolation('${h.host_id}')" style="padding: 2px 7px;">${isIso ? 'Re-Join' : 'Isolate'}</button>
           </td>
         </tr>
@@ -2971,7 +2971,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const procs = stateData.host_processes || [];
     
     const lines = [];
-    lines.push("UNCLOAK // ENTERPRISE EDR ENDPOINT AUDIT DOSSIER");
+    lines.push("UNCLOAK // ENDPOINT AUDIT DOSSIER");
     lines.push("Host: " + h.hostname + " (" + h.ip_address + ") | OS: " + h.os_version + " | Export Time: " + new Date().toISOString());
     lines.push("");
     lines.push("--- CHRONOLOGICAL CONNECTION AUDIT LOG ---");
@@ -3697,7 +3697,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     if (!activeModalPidData || !activeModalPidData.records) return;
     const d = activeModalPidData;
     const lines = [];
-    lines.push("UNCLOAK // ENTERPRISE EDR PID INTERNET USAGE AUDIT");
+    lines.push("UNCLOAK // PID INTERNET USAGE AUDIT");
     lines.push("PID: " + d.pid + " | Process: " + d.process_name + " | Total Bandwidth: " + d.total_bandwidth);
     lines.push("First Seen: " + d.first_seen + " | Last Active: " + d.last_seen);
     lines.push("");
