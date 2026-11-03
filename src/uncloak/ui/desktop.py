@@ -1279,8 +1279,8 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
   <header>
     <div class="brand-group">
       <div class="brand-logo">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="var(--cyan)"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/></svg>
-        UNCLOAK <span style="color: var(--text-dim); font-size: 0.85em; font-weight: 600;">// C2 THREAT HUNTING</span>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="var(--cyan)"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/></svg>
+        <span style="font-weight: 800; letter-spacing: 0.12em; color: var(--cyan);">UNCLOAK</span>
       </div>
       <div class="nav-tabs">
         <button class="nav-tab-btn active" id="tab-fleet" onclick="switchView('fleet')">[1] FLEET THREAT MATRIX</button>
