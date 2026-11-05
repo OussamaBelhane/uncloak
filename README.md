@@ -6,8 +6,8 @@
 
 <p align="center">
   <a href="https://pypi.org/project/uncloak/"><img src="https://img.shields.io/badge/pypi-v0.1.0-blue.svg" alt="PyPI"></a>
-  <a href="https://github.com/uncloak-project/uncloak/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI"></a>
-  <a href="https://github.com/uncloak-project/uncloak/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
+  <a href="https://github.com/OussamaBelhane/uncloak/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI"></a>
+  <a href="https://github.com/OussamaBelhane/uncloak/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg" alt="Python Version"></a>
 </p>
 
@@ -57,46 +57,120 @@ Modern command-and-control (C2) implants (Cobalt Strike, Sliver, Havoc, Brute Ra
 
 ---
 
-### Installation
+### 🪟 Running on Windows (Quickstart Guide)
 
-#### Standalone Single Binary (Zero Dependencies)
-Download the latest `uncloak.exe` from the [Releases](https://github.com/uncloak-project/uncloak/releases) page. No Python or runtime dependencies required.
+Uncloak is natively optimized for **Microsoft Windows 10 & 11 (x64)**. It can be run either as an executive enterprise desktop cockpit (GUI), an interactive terminal dashboard (CUI), or a silent background endpoint daemon.
 
-#### Via PyPI
-```bash
-pip install uncloak
+#### 1. Prerequisites
+* **Python 3.10, 3.11, or 3.12**: Download from [python.org](https://www.python.org/downloads/). Ensure you check **"Add python.exe to PATH"** during installation.
+* **Git for Windows**: Download from [git-scm.com](https://git-scm.com/).
+* **Npcap (Optional for Live Sniffing)**: Download from [npcap.com](https://npcap.com/). Select *"Install Npcap in WinPcap API-compatible Mode"*. (Note: Not required for simulated fleet telemetry, offline PCAP triage, or manager/agent communication).
+
+#### 2. Clone & Setup
+
+Open **PowerShell** or **Windows Terminal** and run:
+
+```powershell
+# Clone the repository
+git clone https://github.com/OussamaBelhane/uncloak.git
+cd uncloak
+
+# Create and activate a dedicated virtual environment
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+# Install in editable development mode
+pip install -e .
 ```
 
-#### From Source (Development)
-```bash
-git clone https://github.com/uncloak-project/uncloak.git
-cd uncloak
-pip install -e ".[dev]"
+> **PowerShell ExecutionPolicy Note:** If PowerShell displays `execution of scripts is disabled on this system`, run this command in your terminal session:
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+> ```
+
+#### 3. Execution Modes on Windows
+
+##### 🌟 Option A: Enterprise Desktop Cockpit (Full GUI - Default on Windows)
+This launches the Central Fleet Manager and opens a dedicated, borderless EDR desktop cockpit window (powered by native Microsoft Edge WebView2 / App Mode):
+```powershell
+uncloak
+# or explicitly:
+uncloak manager
+# or direct python module:
+python -m uncloak
+```
+* **Dashboard Localhost URL:** `http://127.0.0.1:8830`
+* **Features:** Live AD Fleet topology (32 hosts, 5,613 sockets), lateral movement graph, STIX 2.1 exporter, YARA-L generator, live triage drawer, and instant socket eviction.
+
+##### 💻 Option B: Terminal CUI Cockpit (Console Mode)
+For SOC operators working inside Windows Terminal, PowerShell, or remote SSH/WinRM sessions:
+```powershell
+uncloak cli
+# or:
+python -m uncloak cli
+```
+* **Controls:**
+  * `[TAB]` : Toggle deep forensic inspection drawer
+  * `[SPACE]` : Pause / resume live packet stream
+  * `[K]` : Kill selected anomalous socket (`SetTcpEntry DELETE_TCB`)
+  * `[Q]` : Quit cleanly
+
+##### 🛡️ Option C: Silent Endpoint Agent (Background Service)
+To run or register Uncloak as a persistent background sensor:
+```powershell
+# Run directly in foreground:
+uncloak agent
+
+# Or install as an automatic Windows boot daemon (Run PowerShell as Administrator):
+uncloak --install
+
+# Check service status:
+uncloak --status
+
+# Remove service:
+uncloak --uninstall
+```
+
+##### ⚡ Option D: Portable Quick Run (Zero-Install)
+If you prefer running directly without installing the package into your Python environment:
+```powershell
+pip install -r requirements.txt
+$env:PYTHONPATH="src"
+python -m uncloak
 ```
 
 ---
 
-### Quick Start
+### 🐧 Running on Linux / macOS
 
-#### 1. Live Threat Hunting on Network Interface
 ```bash
-# Listen on the primary interface with default HTTPS filter
-uncloak --live
+# Clone and setup
+git clone https://github.com/OussamaBelhane/uncloak.git
+cd uncloak
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 
-# Listen on interface 2 with custom BPF filter
-uncloak --live -i 2 -f "tcp and port 443"
+# Launch Terminal CUI Cockpit (default on POSIX)
+uncloak
+
+# Or launch Central Fleet Manager Web Dashboard
+uncloak manager
 ```
 
-#### 2. Offline DFIR PCAP Triage
+---
+
+### 📂 Offline DFIR PCAP Triage & SOC Streaming
+
+#### 1. Replay & Analyze a Captured PCAP
 ```bash
-# Analyze a suspected C2 capture file
-uncloak hunt -r incident_capture.pcap
+uncloak -r incident_capture.pcap
 ```
 
-#### 3. Headless SOC / SIEM Streaming
+#### 2. Headless SOC / SIEM Streaming
+Output pure line-delimited JSON (NDJSON) to stdout for forwarders (Wazuh, Splunk, Elastic):
 ```bash
-# Output pure NDJSON to stdout for log forwarders
-uncloak --live --json > /var/log/uncloak.json
+uncloak --live --json > uncloak_alerts.json
 ```
 
 ---
