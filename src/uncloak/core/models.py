@@ -107,3 +107,38 @@ class CampaignCluster:
     target_destination: str
     threat_score: float
     status: str = "ACTIVE_INTRUSION"  # ACTIVE_INTRUSION, CONTAINED
+
+
+@dataclass(frozen=True)
+class FlowFeaturesV1:
+    """Frozen 12-feature schema contract for Uncloak v1.0 inference and training."""
+    n_bursts: int
+    iat_median: float
+    iat_mad_ratio: float
+    iat_iqr_ratio: float
+    iat_bowley_skew: float
+    size_out_median: float
+    size_in_median: float
+    size_mad_ratio: float
+    conn_per_burst: float
+    raw_ip_flag: int
+    proc_signed: int
+    proc_path_class: int
+    label: Optional[int] = None
+
+    def to_vector(self) -> list[float]:
+        """Returns the 12 numerical features as an inference vector."""
+        return [
+            float(self.n_bursts),
+            self.iat_median,
+            self.iat_mad_ratio,
+            self.iat_iqr_ratio,
+            self.iat_bowley_skew,
+            self.size_out_median,
+            self.size_in_median,
+            self.size_mad_ratio,
+            self.conn_per_burst,
+            float(self.raw_ip_flag),
+            float(self.proc_signed),
+            float(self.proc_path_class),
+        ]

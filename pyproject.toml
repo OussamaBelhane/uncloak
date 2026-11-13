@@ -24,7 +24,7 @@ keywords = [
     "edr"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Information Technology",
     "Intended Audience :: System Administrators",
@@ -44,6 +44,7 @@ dependencies = [
     "scapy>=2.5.0",
     "numpy>=1.24.0",
     "scipy>=1.11.0",
+    "scikit-learn>=1.3.0",
     "joblib>=1.3.0",
 ]
 
@@ -65,10 +66,10 @@ uncloak-agent = "uncloak.agent.service:main"
 uncloak-manager = "uncloak.ui.desktop:main"
 
 [project.urls]
-Homepage = "https://github.com/uncloak-project/uncloak"
-Documentation = "https://github.com/uncloak-project/uncloak/tree/main/docs"
-Repository = "https://github.com/uncloak-project/uncloak.git"
-Issues = "https://github.com/uncloak-project/uncloak/issues"
+Homepage = "https://github.com/OussamaBelhane/uncloak"
+Documentation = "https://github.com/OussamaBelhane/uncloak/tree/main/docs"
+Repository = "https://github.com/OussamaBelhane/uncloak.git"
+Issues = "https://github.com/OussamaBelhane/uncloak/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/uncloak"]

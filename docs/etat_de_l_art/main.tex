@@ -234,8 +234,8 @@ L'interruption active des canaux C2 se heurte à une dichotomie fondamentale dan
 \textbf{1. Limites de la coupure réseau par injection de paquets RST forgés (Littérature grise et RFC) :}\newline
 La tentative de clore une connexion TCP en injectant des paquets RST forgés depuis une sonde réseau passive ou un équipement NIDS/IPS présente des limites opérationnelles sévères. \textbf{Vectra AI} (\textit{« TCP reset does not stop modern attacks »}) démontre l'impact des conditions de course et rappelle que l'activation par défaut de la \textbf{RFC 5961} (Challenge ACK) amène le noyau récepteur à ignorer les RST non strictement alignés sur le numéro de séquence courant. \textbf{ExtraHop} (\textit{« TCP resets and C2 »}) souligne qu'un RST réseau est fréquemment absorbé par un proxy d'entreprise sans clore la session sur l'hôte, ou entraîne une reconnexion immédiate de l'implant. L'article historique NDSS 2009 illustre la vulnérabilité de cette technique face aux mécanismes de filtrage.
 
-\textbf{2. Fondements scientifiques de l'éviction chirurgicale au niveau du noyau hôte (Uncloak) :}\newline
-Pour éliminer les échecs de l'injection réseau, les recherches en sécurité des OS valident l'approche d'Uncloak : l'\textbf{action directe sur la structure TCB (\textit{Transmission Control Block}) via la pile réseau de l'hôte}. \textbf{Satilmiş et al.} (\textit{IEEE Access} 2024) démontrent l'efficacité des mécanismes HIDS programmatiques exploitant les API natives du noyau (\texttt{SetTcpEntry} via \texttt{iphlpapi.dll} sur Windows avec l'état \texttt{MIB\_TCP\_STATE\_DELETE\_TCB}, ou Netlink \texttt{SOCK\_DESTROY} sur Linux), assurant une fermeture de socket en moins de 5 ms sans instabilité système. \textbf{Bock et al.} (\textit{ACM / USENIX Security} 2020) valident la fermeture unilatérale autoritaire orchestrée par la pile locale, tandis que \textbf{Sommer, Paxson et Weaver} (\textit{ACM TOPS} 2021) prouvent qu'une éviction chirurgicale de la socket C2 est opérationnellement supérieure à l'isolation réseau brutale de la machine.
+\textbf{2. Éviction locale au niveau du noyau hôte et confinement applicatif (Uncloak) :}\newline
+Pour contourner les limites de l'injection réseau hors-bande (RFC 5961, absorption par proxy), Uncloak agit directement au niveau de la pile réseau de l'hôte via l'API native Windows (\texttt{SetTcpEntry} dans \texttt{iphlpapi.dll} avec l'état \texttt{MIB\_TCP\_STATE\_DELETE\_TCB}). Comme le soulignent Vectra AI et ExtraHop, la fermeture d'une session active par RST ne suffit pas contre les balises ouvrant une nouvelle connexion à chaque réveil : l'éviction chirurgicale doit donc être couplée à un confinement ciblé par application (règle pare-feu Windows associée au chemin du binaire et à l'IP distante) afin d'empêcher la reconnexion sans isoler l'ensemble du poste.
 
 \vspace{1mm}
 \subsection*{Références complémentaires}
@@ -280,19 +280,13 @@ Pour éliminer les échecs de l'injection réseau, les recherches en sécurité 
     \item[{[11]}] W. W. Lo, G. K. Kulatilleke, M. Sarhan, S. Layeghy, M. Portmann. \textit{XG-BoT: An Explainable Deep Graph Neural Network for Botnet Detection and Forensics}. arXiv 2207.09088, 2022.\newline
     \url{https://arxiv.org/pdf/2207.09088}
 
-    \item[{[12]}] E. Satilmiş, et al. \textit{A Systematic Review on Host-Based Intrusion Detection Systems: Mitigation Mechanisms}. IEEE Access, 2024. DOI: 10.1109/ACCESS.2024.3361280.
-
-    \item[{[13]}] K. Bock, et al. \textit{TCP Reset Attacks in the Wild: Eviction Strategies and State Manipulation}. ACM / USENIX Security, 2020.
-
-    \item[{[14]}] R. Sommer, V. Paxson, N. Weaver. \textit{Active TCP Teardown Strategies for Incident Response}. ACM Transactions on Privacy and Security (TOPS), 2021.
-
-    \item[{[15]}] Vectra AI. \textit{TCP reset does not stop modern attacks}. Technical Guidance.\newline
+    \item[{[12]}] Vectra AI. \textit{TCP reset does not stop modern attacks}. Technical Guidance.\newline
     \url{https://docs.vectra.ai/operations/analyst-guidance/tcp-reset-does-not-stop-modern-attacks}
 
-    \item[{[16]}] ExtraHop. \textit{TCP resets and C2: Prevent Command and Control \& DoS Attacks}.\newline
+    \item[{[13]}] ExtraHop. \textit{TCP resets and C2: Prevent Command and Control \& DoS Attacks}.\newline
     \url{https://www.extrahop.com/blog/tcp-resets-rst-prevent-command-and-control-dos-attacks/}
 
-    \item[{[17]}] B. Liang, et al. \textit{TCP Provenance Identifier Option}. IETF Internet-Draft, draft-liang-tcp-provenance-option, 2026.\newline
+    \item[{[14]}] B. Liang, et al. \textit{TCP Provenance Identifier Option}. IETF Internet-Draft, draft-liang-tcp-provenance-option, 2026.\newline
     \url{https://datatracker.ietf.org/doc/draft-liang-tcp-provenance-option/}
 \end{enumerate}
 

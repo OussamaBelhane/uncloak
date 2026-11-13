@@ -10,20 +10,28 @@ import json
 import logging
 import os
 import platform
+import secrets
 import socket
+import subprocess
 import sys
 import threading
 import time
 from typing import Any, Optional
 from urllib import request
 
-from uncloak.core.models import FlowSession, HostEndpoint, JitterMetrics
+import psutil
+
+from uncloak.attribution.identity import classify_path
+from uncloak.attribution.trust import verify_authenticode
+from uncloak.core.models import FlowSession
+from uncloak.mitigation.eviction import sever_tcp_connection
+from uncloak.mitigation.firewall import block_application_destination
 
 logger = logging.getLogger("uncloak.agent")
 
 
 class UncloakAgentService:
-    """Headless enterprise agent daemon operating with < 10 MB RAM footprint."""
+    """Headless enterprise agent daemon operating with lightweight footprint."""
 
     def __init__(
         self,
@@ -32,7 +40,12 @@ class UncloakAgentService:
         heartbeat_interval: float = 15.0,
     ) -> None:
         self.manager_url = manager_url.rstrip("/")
-        self.auth_token = auth_token or "UNCLOAK_ENTERPRISE_HMAC_LOCAL_SEC"
+        # Resolve authentication token dynamically; avoid hardcoded static secrets
+        self.auth_token = (
+            auth_token
+            or os.environ.get("UNCLOAK_AGENT_TOKEN")
+            or secrets.token_urlsafe(32)
+        )
         self.heartbeat_interval = heartbeat_interval
         self.is_running = False
         self.host_id = f"host-{socket.gethostname().lower()}"
@@ -59,90 +72,63 @@ class UncloakAgentService:
             self.manager_url,
         )
 
-        heartbeat_thread = threading.Thread(
-            target=self._heartbeat_loop,
-            daemon=daemon,
-            name="UncloakHeartbeatWorker",
-        )
-        heartbeat_thread.start()
-
-        if not daemon:
-            try:
-                while self.is_running:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                self.stop()
+        if daemon:
+            t = threading.Thread(target=self._telemetry_worker, daemon=True)
+            t.start()
+        else:
+            self._telemetry_worker()
 
     def stop(self) -> None:
-        """Gracefully stops the agent and flushes local buffers."""
+        """Gracefully halts the agent service."""
         self.is_running = False
-        logger.info("Uncloak Agent [%s] terminated gracefully.", self.hostname)
 
-    def _heartbeat_loop(self) -> None:
-        """Transmits state pings to Central Manager every 15 seconds."""
+    def _telemetry_worker(self) -> None:
+        """Continuous background loop dispatching heartbeats and collecting socket table diffs."""
         while self.is_running:
             try:
                 self._send_heartbeat()
-            except Exception as e:
-                logger.debug("Heartbeat sync failure (manager unreachable): %s", e)
+            except Exception as exc:
+                logger.debug("Heartbeat transmission error: %s", exc)
             time.sleep(self.heartbeat_interval)
 
     def _collect_local_telemetry(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Gathers real running processes and active network connections from the local host."""
-        processes = []
-        connections = []
-        sockets_by_pid: dict[int, list[dict[str, Any]]] = {}
+        """Harvests local OS process list and active TCP sockets."""
+        processes: list[dict[str, Any]] = []
+        connections: list[dict[str, Any]] = []
 
-        # 1. Enumerate active network sockets
         try:
-            import psutil
-            import datetime
-            for s in psutil.net_connections(kind="inet"):
-                laddr = f"{s.laddr.ip}:{s.laddr.port}" if s.laddr else ""
-                raddr = f"{s.raddr.ip}:{s.raddr.port}" if s.raddr else ""
-                if not laddr and not raddr:
-                    continue
-                sock_rec = {
-                    "conn_id": f"c_{s.pid}_{s.laddr.port if s.laddr else 0}",
-                    "pid": s.pid or 0,
-                    "process_name": "unknown",
-                    "protocol": "TCP" if s.type == socket.SOCK_STREAM else "UDP",
-                    "local_addr": laddr,
-                    "remote_addr": raddr or "- (Listening)",
-                    "sni": "",
-                    "state": s.status,
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                    "duration": "Active",
-                    "bytes_str": "Dynamic",
-                    "verdict": "SAFE",
-                }
-                connections.append(sock_rec)
-                if s.pid:
-                    sockets_by_pid.setdefault(s.pid, []).append(sock_rec)
+            raw_conns = psutil.net_connections(kind="tcp")
+            for c in raw_conns:
+                if c.status == "ESTABLISHED" and c.raddr:
+                    connections.append({
+                        "laddr": f"{c.laddr.ip}:{c.laddr.port}",
+                        "raddr": f"{c.raddr.ip}:{c.raddr.port}",
+                        "status": c.status,
+                        "pid": c.pid,
+                    })
         except Exception:
             pass
 
-        # 2. Enumerate running processes
-        now = time.time()
         try:
-            import psutil
-            import datetime
-            for p in psutil.process_iter(['pid', 'name', 'ppid', 'username', 'cpu_percent', 'memory_info', 'create_time', 'exe']):
+            for p in psutil.process_iter(["pid", "ppid", "name", "exe", "username", "cpu_percent", "memory_info", "create_time"]):
                 try:
                     info = p.info
-                    pid = info.get("pid")
-                    if not pid or pid == 0:
-                        continue
+                    pid = info["pid"]
                     p_name = info.get("name") or "unknown"
-                    c_time = info.get("create_time") or now
-                    dt_str = datetime.datetime.fromtimestamp(c_time, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                    mem_rss = info.get("memory_info")
-                    ram_mb = round(mem_rss.rss / (1024 * 1024), 1) if mem_rss else 0.0
-                    p_socks = sockets_by_pid.get(pid, [])
-                    
-                    # Measure process internet/network I/O
-                    bandwidth_str = "0 B"
+                    exe_path = info.get("exe") or ""
+
+                    # Correlate active sockets for this process
+                    p_socks = [c for c in connections if c["pid"] == pid]
+
+                    mem = info.get("memory_info")
+                    ram_mb = round(mem.rss / (1024 * 1024), 1) if mem else 0.0
+
+                    ctime = info.get("create_time") or 0.0
+                    dt_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ctime)) if ctime else ""
+
+                    # Process I/O bytes
                     total_bytes = 0
+                    bandwidth_str = "0 B"
                     try:
                         io = p.io_counters()
                         if io:
@@ -158,13 +144,13 @@ class UncloakAgentService:
                     except Exception:
                         pass
 
-                    # Update process name and bandwidth on connections
                     for sock in p_socks:
                         sock["process_name"] = p_name
-                        sock["bytes_str"] = bandwidth_str if total_bytes > 0 else "512 B"
+                        sock["bytes_str"] = bandwidth_str if total_bytes > 0 else "0 B"
 
-                    exe_path = info.get("exe") or ""
-                    is_signed = not any(k in exe_path.lower() for k in ["temp", "appdata\\roaming\\", "downloads"])
+                    # Genuine Authenticode verification and path classification
+                    is_signed, sig_details = verify_authenticode(exe_path)
+                    path_class = classify_path(exe_path)
 
                     processes.append({
                         "pid": pid,
@@ -179,7 +165,9 @@ class UncloakAgentService:
                         "start_time": dt_str,
                         "socket_count": len(p_socks),
                         "is_signed": is_signed,
-                        "threat_score": 0.015,
+                        "sig_details": sig_details,
+                        "path_class": path_class,
+                        "threat_score": 0.0,
                         "status": "ACTIVE",
                     })
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -226,26 +214,36 @@ class UncloakAgentService:
         """Processes mitigation directives dispatched by the Central Manager."""
         action = directive.get("action")
         target_pid = directive.get("pid")
-        if action == "SEVER_SOCKET" and target_pid:
+        local_ip = directive.get("local_ip", "127.0.0.1")
+        local_port = int(directive.get("local_port", 0))
+        remote_ip = directive.get("remote_ip", "0.0.0.0")
+        remote_port = int(directive.get("remote_port", 0))
+        program_path = directive.get("program_path", "")
+
+        if action == "SEVER_SOCKET" and local_port > 0 and remote_port > 0:
             logger.warning(
-                "Executing authorized kernel TCP teardown on PID %s",
+                "Executing authorized kernel TCP teardown on socket %s:%d -> %s:%d (PID %s)",
+                local_ip,
+                local_port,
+                remote_ip,
+                remote_port,
                 target_pid,
             )
-            # Invoke native iphlpapi.dll SetTcpEntry
-        elif action == "TARPIT_GHOST" and target_pid:
+            sever_tcp_connection(local_ip, local_port, remote_ip, remote_port)
+        elif action == "BLOCK_DESTINATION" and program_path and remote_ip != "0.0.0.0":
+            rule_name = f"Uncloak_Contain_{target_pid}_{remote_ip}"
             logger.warning(
-                "Enforcing TCP Zero-Window tarpit quarantine on PID %s",
-                target_pid,
+                "Enforcing firewall containment rule '%s' for binary %s to %s",
+                rule_name,
+                program_path,
+                remote_ip,
             )
+            block_application_destination(rule_name, program_path, remote_ip)
 
     def run_local_tui(self) -> int:
         """Launches the Rich terminal cockpit locally for physical break-glass triage."""
         from uncloak.ui.cockpit import run_cockpit
         return run_cockpit(demo_mode=True)
-
-
-
-import subprocess
 
 
 def install_windows_service() -> bool:
@@ -259,12 +257,22 @@ def install_windows_service() -> bool:
         pythonw = sys.executable
 
     task_name = "UncloakEndpointAgent"
-    cmd = (
-        f'schtasks /create /tn "{task_name}" '
-        f'/tr "\"{pythonw}\" -m uncloak.agent.service" '
-        f'/sc onstart /ru "SYSTEM" /rl HIGHEST /f'
-    )
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    cmd = [
+        "schtasks",
+        "/create",
+        "/tn",
+        task_name,
+        "/tr",
+        f'"{pythonw}" -m uncloak.agent.service',
+        "/sc",
+        "onstart",
+        "/ru",
+        "SYSTEM",
+        "/rl",
+        "HIGHEST",
+        "/f",
+    ]
+    res = subprocess.run(cmd, shell=False, capture_output=True, text=True)
     if res.returncode == 0:
         print(f"[+] Successfully registered '{task_name}' in Windows Task Scheduler.")
         print("[+] Startup Mode : Starts automatically on PC boot (NT AUTHORITY\\SYSTEM).")
@@ -279,8 +287,8 @@ def install_windows_service() -> bool:
 def uninstall_windows_service() -> bool:
     """Removes the Uncloak Agent background task from Windows."""
     task_name = "UncloakEndpointAgent"
-    cmd = f'schtasks /delete /tn "{task_name}" /f'
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    cmd = ["schtasks", "/delete", "/tn", task_name, "/f"]
+    res = subprocess.run(cmd, shell=False, capture_output=True, text=True)
     if res.returncode == 0:
         print(f"[+] Successfully removed '{task_name}' from Windows startup.")
         return True
@@ -292,8 +300,8 @@ def uninstall_windows_service() -> bool:
 def query_service_status() -> None:
     """Queries the running state of the Uncloak Agent Windows task."""
     task_name = "UncloakEndpointAgent"
-    cmd = f'schtasks /query /tn "{task_name}" /fo LIST'
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    cmd = ["schtasks", "/query", "/tn", task_name, "/fo", "LIST"]
+    res = subprocess.run(cmd, shell=False, capture_output=True, text=True)
     if res.returncode == 0:
         print(f"[*] Task '{task_name}' is installed and active in Windows:")
         for line in res.stdout.splitlines():
@@ -329,12 +337,6 @@ def main(args: Optional[list[str]] = None) -> int:
     print(f"[*] Uncloak Silent Endpoint Agent initialized on [{agent.hostname}]")
     print(f"[*] Connecting to Manager at {agent.manager_url} (Heartbeat: 15s)...")
     print("[*] Taskbar Visibility: Headless (0% taskbar, 0% system tray)")
-    agent.start(daemon=False)
-    return 0
-    """CLI entrypoint for standalone uncloak-agent."""
-    agent = UncloakAgentService()
-    print(f"[*] Uncloak Silent Endpoint Agent initialized on [{agent.hostname}]")
-    print(f"[*] Connecting to Manager at {agent.manager_url} (Heartbeat: 15s)...")
     agent.start(daemon=False)
     return 0
 

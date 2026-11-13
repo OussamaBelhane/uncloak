@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UncloakFeatureSchemaV1",
+  "version": "1.0.0",
+  "description": "Unified and frozen feature schema contract for Uncloak v1.0 inference and modern lab training.",
+  "unit_of_analysis": {
+    "key": "(process_identity, destination_key)",
+    "window": "Sliding window of N consecutive application bursts (minimum 10 bursts before ML inference)",
+    "burst_threshold_ms": 200
+  },
+  "features": [
+    {
+      "index": 1,
+      "name": "n_bursts",
+      "type": "integer",
+      "unit": "count",
+      "description": "Number of observed communication bursts in the sliding window. Gating threshold: >= 10 bursts required before evaluating probability."
+    },
+    {
+      "index": 2,
+      "name": "iat_median",
+      "type": "float",
+      "unit": "seconds",
+      "description": "Median of inter-arrival times (IAT) between successive bursts. Serves as robust sleep interval estimator."
+    },
+    {
+      "index": 3,
+      "name": "iat_mad_ratio",
+      "type": "float",
+      "unit": "ratio",
+      "formula": "MAD(IAT) / median(IAT)",
+      "description": "Normalized Median Absolute Deviation of inter-arrival times. Robust replacement for CV against outliers and network delays."
+    },
+    {
+      "index": 4,
+      "name": "iat_iqr_ratio",
+      "type": "float",
+      "unit": "ratio",
+      "formula": "IQR(IAT) / median(IAT)",
+      "description": "Normalized Interquartile Range of inter-arrival times. Secondary robust dispersion metric."
+    },
+    {
+      "index": 5,
+      "name": "iat_bowley_skew",
+      "type": "float",
+      "unit": "dimensionless",
+      "formula": "(Q3 + Q1 - 2*Q2) / (Q3 - Q1)",
+      "description": "Bowley skewness coefficient. Evaluates asymmetry in the inter-arrival distribution to separate uniform vs multiplicative jitter."
+    },
+    {
+      "index": 6,
+      "name": "size_out_median",
+      "type": "float",
+      "unit": "bytes",
+      "description": "Median number of outbound bytes transmitted per burst."
+    },
+    {
+      "index": 7,
+      "name": "size_in_median",
+      "type": "float",
+      "unit": "bytes",
+      "description": "Median number of inbound bytes received per burst."
+    },
+    {
+      "index": 8,
+      "name": "size_mad_ratio",
+      "type": "float",
+      "unit": "ratio",
+      "formula": "MAD(size_out) / median(size_out)",
+      "description": "Normalized Median Absolute Deviation of outbound payload sizes. Quantifies heartbeat regularity."
+    },
+    {
+      "index": 9,
+      "name": "conn_per_burst",
+      "type": "float",
+      "unit": "ratio",
+      "formula": "n_tcp_connections / n_bursts",
+      "description": "Ratio of distinct TCP connections to bursts. Distinguishes ephemeral HTTP(S) check-ins from long-lived persistent tunnels."
+    },
+    {
+      "index": 10,
+      "name": "raw_ip_flag",
+      "type": "integer",
+      "allowed_values": [0, 1],
+      "description": "Host-side DNS correlation flag. Set to 1 if the process established a connection to an IP address without prior local DNS resolution."
+    },
+    {
+      "index": 11,
+      "name": "proc_signed",
+      "type": "integer",
+      "allowed_values": [0, 1],
+      "description": "Authenticode digital signature verification via WinVerifyTrust (wintrust.dll). 1 if cryptographically valid and trusted, 0 otherwise."
+    },
+    {
+      "index": 12,
+      "name": "proc_path_class",
+      "type": "integer",
+      "allowed_values": [0, 1, 2, 3],
+      "description": "Binary filesystem location classification: 0 = System/Program Files, 1 = AppData/Local, 2 = Temp/Downloads/Public, 3 = Unresolved/Exited."
+    }
+  ],
+  "label": {
+    "name": "label",
+    "type": "integer",
+    "allowed_values": [0, 1],
+    "description": "0 = Benign background traffic, 1 = Confirmed C2 beacon flow (training and benchmarking only)."
+  }
+}

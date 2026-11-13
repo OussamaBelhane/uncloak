@@ -45,7 +45,7 @@ class CockpitDataManager:
             flows = self.fleet.host_flows.get(selected_host.host_id, [])
 
             now = time.time()
-            packet_rate = 145 + int(now * 2) % 12
+            packet_rate = getattr(self.fleet, "simulated_packet_rate", 145)
 
             flows_data = []
             for f in flows:
@@ -1281,6 +1281,10 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       <div class="brand-logo">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="var(--cyan)"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/></svg>
         <span style="font-weight: 800; letter-spacing: 0.12em; color: var(--cyan);">UNCLOAK</span>
+      </div>
+      <div id="demo-mode-indicator" style="background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fbbf24; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px;">
+        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></span>
+        DEMO MODE (SIMULATED DATA)
       </div>
       <div class="nav-tabs">
         <button class="nav-tab-btn active" id="tab-fleet" onclick="switchView('fleet')">[1] FLEET THREAT MATRIX</button>

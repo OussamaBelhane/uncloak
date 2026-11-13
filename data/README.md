@@ -20,23 +20,28 @@ data/
 
 ---
 
-## 🔬 Expected Training Feature Schema
+## Expected Training Feature Schema (v1 Contract)
 
-The training pipeline expects a CSV table with exactly these 8 columns:
+The training and inference pipeline expects a CSV/Parquet table adhering to **Feature Schema v1** (computed over a sliding window of application bursts merged within 200 ms):
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
-| `delta_t_mean` | `float` | Mean inter-burst pause time (seconds) |
-| `delta_t_std` | `float` | Standard deviation of intervals |
-| `delta_t_cv` | `float` | Coefficient of Variation (`std / mean`) |
-| `burst_bytes_iqr` | `float` | Interquartile range of burst sizes in bytes |
-| `payload_packet_ratio` | `float` | Ratio of non-pure-ACK packets |
-| `out_in_ratio` | `float` | Ratio of bytes transmitted vs received |
-| `sni_asn_mismatch` | `int` | `1` if SNI domain does not match destination ASN, else `0` |
+| `n_bursts` | `int` | Number of logical bursts observed in the window |
+| `iat_median` | `float` | Median inter-burst interval in seconds |
+| `iat_mad_ratio` | `float` | Normalized Median Absolute Deviation (`MAD / median`) |
+| `iat_iqr_ratio` | `float` | Normalized Interquartile Range (`IQR / median`) |
+| `iat_bowley_skew` | `float` | Bowley skewness `(Q3 + Q1 - 2*Q2) / (Q3 - Q1)` |
+| `size_out_median` | `float` | Median outbound burst size in bytes |
+| `size_in_median` | `float` | Median inbound burst size in bytes |
+| `size_mad_ratio` | `float` | Normalized MAD of burst sizes |
+| `conn_per_burst` | `float` | Ratio of new TCP connections per burst (1.0 = ephemeral, ~0.0 = persistent) |
+| `raw_ip_flag` | `int` | `1` if destination IP had no prior DNS/SNI resolution, else `0` |
+| `proc_signed` | `int` | `1` if binary has valid Authenticode signature (`WinVerifyTrust`), else `0` |
+| `proc_path_class` | `int` | `0` = System/Program Files, `1` = User-writable, `2` = Temp/AppData/Downloads |
 | `label` | `int` | `0` = Benign enterprise traffic, `1` = Malicious C2 Beacon |
 
 ---
 
-## 🔗 Official Benchmark Sources
-- **CTU-13 Dataset :** [Stratosphere IPS Project](https://www.stratosphereips.org/datasets-ctu13)
-- Scenarios recommended for training : Scenario 1 (Neris), Scenario 4 (Rbot), Scenario 9 (Virut), Scenario 10 (Rbot).
+## Dataset Strategy
+- **Primary Training & Evaluation (Modern Lab Corpus):** Multi-day benign Windows 10/11 enterprise traffic (Teams, Edge, OneDrive, Windows Update, Slack) combined with controlled C2 captures (Sliver, Havoc) across a grid of sleep intervals and jitter percentages.
+- **Historical Context Only:** The **CTU-13 Dataset** ([Stratosphere IPS](https://www.stratosphereips.org/datasets-ctu13)) is cited for historical background only; its legacy 2011 BinetFlow format does not contain TLS SNI, process attribution, or burst-level timing structures required by Schema v1.

@@ -15,8 +15,8 @@ The Uncloak project takes the security of its endpoint inspection engine serious
 
 **Please do NOT file public GitHub issues for security vulnerabilities.**
 
-Instead, please send an encrypted or direct advisory to:
-- **Email:** `security@uncloak.dev` (or via private GitHub Security Advisory)
+Instead, please report vulnerabilities privately via GitHub Security Advisories:
+- **Advisory:** [Report a Vulnerability on GitHub](https://github.com/OussamaBelhane/uncloak/security/advisories/new)
 
 ### What to Include in Your Report:
 1. Type of issue (e.g. buffer overrun, unhandled Win32 API exception, BPF bypass).

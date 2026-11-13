@@ -21,17 +21,22 @@ def build_parser() -> argparse.ArgumentParser:
         version="%(prog)s 0.1.0 (Enterprise Architecture)",
     )
     
-    # Optional positional subcommand for clean ergonomic CLI (e.g. 'uncloak manager', 'uncloak agent')
+    # Optional positional subcommand for clean ergonomic CLI (e.g. 'uncloak manager', 'uncloak agent', 'uncloak demo')
     parser.add_argument(
         "subcommand",
         nargs="?",
-        choices=["manager", "agent", "gui", "cli", "hunt"],
+        choices=["manager", "agent", "gui", "cli", "hunt", "demo"],
         default=None,
-        help="Subcommand mode: manager (Fleet Dashboard), agent (Endpoint Daemon), cli/hunt (Terminal TUI)",
+        help="Subcommand mode: manager (Fleet Dashboard), agent (Endpoint Daemon), cli/hunt (Terminal TUI), demo (Simulated AD Fleet)",
     )
 
     # Execution modes
     mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--demo",
+        action="store_true",
+        help="Launch the dedicated enterprise cockpit in simulated demo mode (32 synthetic AD hosts)",
+    )
     mode_group.add_argument(
         "--manager",
         action="store_true",
@@ -138,6 +143,27 @@ def main(args: Optional[list[str]] = None) -> int:
         query_service_status()
         return 0
 
+    if parsed_args.read:
+        from uncloak.capture.pcap import analyze_pcap
+        print(f"[*] Replaying capture from: {parsed_args.read}")
+        count = 0
+        try:
+            for flow_key, features in analyze_pcap(parsed_args.read):
+                count += 1
+                print(
+                    f"[+] Flow: {flow_key} | Bursts: {features.n_bursts} | "
+                    f"IAT Median: {features.iat_median:.3f}s | "
+                    f"MAD: {features.iat_mad_ratio:.3f} | "
+                    f"IQR: {features.iat_iqr_ratio:.3f} | "
+                    f"Skew: {features.iat_bowley_skew:.3f}"
+                )
+            print(f"[*] PCAP analysis complete. Extracted features for {count} qualifying flows.")
+        except Exception as exc:
+            print(f"[-] PCAP analysis error: {exc}")
+            return 1
+        return 0
+
+    is_demo = parsed_args.demo or parsed_args.subcommand == "demo"
     is_agent = parsed_args.agent or parsed_args.subcommand == "agent"
     is_manager = parsed_args.manager or parsed_args.subcommand == "manager"
     is_cli = parsed_args.cli or parsed_args.subcommand in ("cli", "hunt")
@@ -153,10 +179,10 @@ def main(args: Optional[list[str]] = None) -> int:
 
     if is_cli:
         from uncloak.ui.cockpit import run_cockpit
-        return run_cockpit(demo_mode=True)
+        return run_cockpit(demo_mode=is_demo or True)
 
-    if is_manager or is_gui or (sys.platform == "win32" and not is_cli):
-        # Default on Windows desktop or when manager is requested
+    if is_demo or is_manager or is_gui or (sys.platform == "win32" and not is_cli):
+        # Default on Windows desktop or when manager/demo is requested
         from uncloak.ui.desktop import launch_desktop
         return launch_desktop()
 

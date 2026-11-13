@@ -1,97 +1,97 @@
-# Scientific Foundations & Literature Review: Uncloak (15 Peer-Reviewed Papers)
+# Scientific Foundations & Literature Review: Uncloak
 
-Uncloak bridges passive statistical network flow inspection, zero-decryption TLS fingerprinting (JA4), live Win32 kernel socket-to-process attribution, and surgical TCP teardown. 
+Uncloak bridges passive statistical network flow inspection, zero-decryption TLS fingerprinting (JA4+), live Win32 socket-to-process attribution, and surgical TCP teardown / per-application containment.
 
-This document establishes the scientific foundations across 15 peer-reviewed publications (IEEE, ACM, USENIX, IFIP SEC) validating Uncloak's architecture.
+This document catalogs verified peer-reviewed publications and technical references grounding Uncloak's architecture. Every DOI and arXiv identifier below has been verified.
 
 ---
 
 ## Strategic Architecture Mapping
 
-| Uncloak Architectural Subsystem | Supporting Research & Theoretical Grounding | Key Academic Insight |
+| Uncloak Architectural Subsystem | Supporting Research & Technical Grounding | Key Insight |
 | :--- | :--- | :--- |
-| **Pillar 1: Cadence Engine ($\Delta t$, Jitter)** | Gupta et al. (2025), Burgetová et al. (IEEE CSNet 2024), Kim et al. (IEEE ICTC 2022) | Robust non-parametric dispersion metrics (Median, IQR, MAD) isolate automated beaconing from human traffic without being distorted by injected stochastic jitter. |
-| **Pillar 2: Zero-Decryption TLS (JA4, SNI)** | Theofanous et al. (ACM WWW 2024), Thomson et al. (arXiv 2024), Heino et al. (2023) | 99% precision in botnet classification using raw TLS handshake syntax. Proves MD5-based JA3 degrades on TLS 1.3/CDNs, necessitating JA4 syntax. |
-| **Pillar 3: Socket-to-Process Attribution** | Haas, Sommer & Fischer (IFIP SEC 2020), Seo et al. (IEEE Access 2023), Allen et al. (2021) | Zeek-Osquery paradigm achieves 96% real-time socket-to-PID correlation across 870 hosts, solving the critical network-layer endpoint blindspot. |
-| **Pillar 4: ML Inference & CTU-13 Benchmark** | Alharbi & Alsubhi (IEEE Access 2021), Sharma & Babbar (IEEE INCET 2024), Martijan et al. (IEEE CSR 2025) | Tree-based models (Random Forest / XGBoost) yield 96-98% accuracy on real malware datasets (CTU-13, FormBook, AgentTesla) within ultra-low latency bounds. |
-| **Pillar 5: Surgical Eviction (SetTcpEntry)** | Bock et al. (USENIX Security 2020), Satilmiş et al. (IEEE Access 2024), Sommer, Paxson & Weaver (ACM TOPS 2021) | Eliminates active C2 sockets via native kernel TCP Control Block (TCB) deletion in < 5 ms without kernel instability, BSOD risk, or network disruption. |
+| **Pillar 1: Cadence & Burst Timing** | Yilmaz et al. (Springer IJIS 2026), Parssegny et al. (ARES 2025) | Timing-based flow metadata analysis isolates periodic beaconing without payload decryption, while requiring robust estimators against jitter. |
+| **Pillar 2: Zero-Decryption TLS (JA4+, SNI)** | Matoušek et al. (IEEE CNSM 2024), Theofanous et al. (ACM WWW 2024), Shbair et al. (2020) | ClientHello metadata and JA4+ fingerprints provide high-value contributory signals, though malleable C2 profiles and shared TLS stacks (Schannel) prevent JA4+ from serving as a standalone verdict. |
+| **Pillar 3: Host-Network Attribution** | Haas, Sommer & Fischer (IFIP SEC 2020), Liang et al. (IETF Draft 2026) | Combining network flow telemetry with host process tables bridges the network-only blindspot of NIDS/RITA. |
+| **Pillar 4: Explainable ML Inference** | Yang et al. (Computer Networks 2024), Lo et al. (2022) | Lightweight tree ensembles and flow-metadata models outperform heavy black-box architectures on encrypted C2 traffic when evaluated on precision-recall and false-positive rate. |
+| **Pillar 5: TCP Teardown & Containment Limits** | Vectra AI Technical Guidance, ExtraHop Technical Guidance | Out-of-band TCP RSTs sever active sessions immediately, but short-lived HTTP(S) beacons reconnect on the next sleep cycle unless paired with per-application firewall containment. |
 
 ---
 
-## 1. Statistical Beaconing & Jitter Analysis
-1. **Gupta et al. (2025) - *C2 Beaconing Detection via AI-Based Time-Series Analysis***
-   * *Method:* Time-series inter-arrival analysis ($\Delta t$) isolating automated distributions from user noise despite artificial jitter.
-   * *Uncloak Role:* Validates Median, IQR, and MAD as the mathematical core of Uncloak's cadence engine.
-   * *Ref:* [Semantic Scholar](https://www.semanticscholar.org/paper/25d2e9db664451e4935b6df1bf8243d2)
-2. **Burgetová et al. (2024) - *Towards Identification of Network Applications in Encrypted Traffic***
-   * *Method:* Sequence of Packet Length and Time (SPLT) combined with flow metadata.
-   * *Uncloak Role:* Validates dual-vector analysis: packet timing combined with payload size variance.
-   * *Ref:* [DOI: 10.1109/CSNet62993.2024.10842240](https://doi.org/10.1109/CSNet62993.2024.10842240)
-3. **Kim et al. (2022) - *Revisiting TLS-Encrypted Traffic Fingerprinting Methods***
-   * *Method:* Markov chain transition probability matrices capturing stochastic malware behavior.
-   * *Uncloak Role:* Theoretical modeling for Cobalt Strike Malleable C2 profiles.
-   * *Ref:* [DOI: 10.1109/ICTC55108.2022.9952874](https://doi.org/10.1109/ICTC55108.2022.9952874)
+## 1. Statistical Beaconing & Encrypted Flow Metadata
+
+1. **Yilmaz, M. T., Doğan, F., Söğüt, E., Algül, E., & Aksoy, Ç. (2026) - *Beaconing detection via timing-based flow metadata analysis: implications for SCADA/ICS***
+   * *Publication:* International Journal of Information Security, Springer, Vol. 25, Issue 5.
+   * *Uncloak Role:* Validates timing-based metadata analysis on encrypted flows using inter-arrival dispersion.
+   * *Ref:* [DOI: 10.1007/s10207-026-01335-w](https://doi.org/10.1007/s10207-026-01335-w)
+
+2. **Parssegny, C., Mazel, J., Levillain, O., & Chifflier, P. (2025) - *Striking Back at Cobalt: Using Network Traffic Metadata to Detect Cobalt Strike Masquerading Command and Control Channels***
+   * *Publication:* ARES 2025, LNCS 15992, Springer, pp. 163-185.
+   * *Uncloak Role:* Demonstrates detection of masquerading Cobalt Strike C2 channels using network traffic metadata rather than payload inspection.
+   * *Ref:* [arXiv:2506.08922](https://arxiv.org/abs/2506.08922)
+
+3. **Daihes, Y., Tzaban, H., Nadler, A., & Shabtai, A. (2020) - *MORTON: Detection of Malicious Routines in Large-Scale DNS Traffic***
+   * *Publication:* arXiv preprint.
+   * *Uncloak Role:* Informs behavioral/routine detection in DNS query streams.
+   * *Ref:* [arXiv:2008.02003](https://arxiv.org/abs/2008.02003)
 
 ---
 
 ## 2. Zero-Decryption TLS Fingerprinting
-4. **Theofanous et al. (2024) - *Fingerprinting the Shadows: Unmasking Malicious Servers with ML***
-   * *Method:* ML pipeline analyzing TLS negotiation parameters (cipher suites, extensions, SNI). 99% precision on real botnets.
-   * *Uncloak Role:* Proves passive initial handshake inspection classifies C2 servers without SSL inspection.
+
+4. **Matoušek, P., Ryšavý, O., & Burgetová, I. (2024) - *Experience Report: Using JA4+ Fingerprints for Malware Detection in Encrypted Traffic***
+   * *Publication:* 20th International Conference on Network and Service Management (IEEE CNSM 2024), Prague, pp. 1-5.
+   * *Uncloak Role:* Establishes that JA4+ fingerprints overlap between malware and benign software sharing OS TLS stacks (e.g., Schannel) or uTLS, confirming JA4+ must be a contributory signal rather than a standalone verdict.
+   * *Ref:* [DOI: 10.23919/CNSM62983.2024.10814358](https://doi.org/10.23919/CNSM62983.2024.10814358)
+
+5. **Theofanous, M., et al. (2024) - *Fingerprinting the Shadows: Unmasking Malicious Servers with Machine Learning***
+   * *Publication:* Companion Proceedings of the ACM Web Conference (WWW 2024).
+   * *Uncloak Role:* Demonstrates passive TLS negotiation inspection for classifying malicious infrastructure without SSL interception.
    * *Ref:* [DOI: 10.1145/3589334.3645719](https://doi.org/10.1145/3589334.3645719)
-5. **Thomson et al. (2024) - *A Novel TLS-Based Fingerprinting Approach Combining Feature Expansion***
-   * *Method:* Locality-sensitive hashing (MinHash/LSH) overcoming JA3 collision rates under TLS 1.3.
-   * *Uncloak Role:* Validates the adoption of JA4 over legacy JA3 in Uncloak.
-   * *Ref:* [arXiv:2410.03362](https://arxiv.org/abs/2410.03362)
-6. **Heino et al. (2023) - *Categorizing TLS Traffic Based on JA3 Pre-Hash Values***
-   * *Method:* Training models directly on raw Client Hello parameter strings rather than 32-character hashes.
-   * *Uncloak Role:* Informs Uncloak's raw parameter parser for anomaly detection on offensive tools.
-   * *Ref:* [Semantic Scholar](https://www.semanticscholar.org/paper/b469278b8eb955479418ebf5c5ec3c31)
+
+6. **Shbair, W. M., Cholez, T., François, J., & Chrisment, I. (2020) - *Early Identification of Services in HTTPS Traffic***
+   * *Publication:* arXiv preprint.
+   * *Uncloak Role:* Grounding for early handshake inspection (SNI and initial TLS records) without full-stream decryption.
+   * *Ref:* [arXiv:2008.08350](https://arxiv.org/abs/2008.08350)
 
 ---
 
 ## 3. Host-Network Correlation (Socket-to-PID Attribution)
-7. **Haas, Sommer & Fischer (2020) - *Zeek-Osquery: Host-Network Correlation for Advanced Monitoring***
-   * *Method:* Unified network monitoring with host kernel tables. 96% socket-to-process attribution across 870 enterprise hosts.
-   * *Uncloak Role:* Architectural precedent for pairing packet capture with native Win32 process tracking.
-   * *Ref:* [DOI: 10.1007/978-3-030-52569-9_24](https://doi.org/10.1007/978-3-030-52569-9_24)
-8. **Seo et al. (2023) - *BotFence: Network-Enriched Botnet Detection and Response***
-   * *Method:* Network-to-host provenance graph operating under 1 ms latency.
-   * *Uncloak Role:* Validates zero-delay querying of `iphlpapi.GetExtendedTcpTable`.
-   * *Ref:* [DOI: 10.1109/ACCESS.2023.3328519](https://doi.org/10.1109/ACCESS.2023.3328519)
-9. **Allen et al. (2021) - *Predicting Process Name from Network Data***
-   * *Method:* Flow-based statistical process classification achieving 88% application accuracy.
-   * *Uncloak Role:* Provides secondary confirmation when malware attempts PPID spoofing.
-   * *Ref:* [arXiv:2109.01509](https://arxiv.org/abs/2109.01509)
+
+7. **Haas, S., Sommer, R., & Fischer, M. (2020) - *zeek-osquery: Host-Network Correlation for Advanced Monitoring and Intrusion Detection***
+   * *Publication:* IFIP SEC 2020.
+   * *Uncloak Role:* Architectural precedent for pairing network flow monitoring with host process tables to eliminate network-only blindspots.
+   * *Ref:* [arXiv:2002.04547](https://arxiv.org/abs/2002.04547)
+
+8. **Liang, B., et al. (2026) - *TCP Provenance Identifier Option***
+   * *Publication:* IETF Internet-Draft (`draft-liang-tcp-provenance-option`).
+   * *Uncloak Role:* Reflects industry convergence toward binding socket telemetry directly to host process identifiers (PID).
+   * *Ref:* [IETF Datatracker](https://datatracker.ietf.org/doc/draft-liang-tcp-provenance-option/)
 
 ---
 
-## 4. Machine Learning & Reference Datasets
-10. **Alharbi & Alsubhi (2021) - *Botnet Detection Approach Using Graph-Based Machine Learning***
-    * *Method:* Topological feature selection tackling class imbalance on CTU-13 (< 1.5% malicious flows).
-    * *Uncloak Role:* Guides training sample balancing to eliminate false positives on benign enterprise traffic.
-    * *Ref:* [DOI: 10.1109/ACCESS.2021.3090886](https://doi.org/10.1109/ACCESS.2021.3090886)
-11. **Sharma & Babbar (2024) - *Detecting Cyber Threats in Real-Time: A Supervised Learning Perspective on CTU-13***
-    * *Method:* Supervised benchmarking on CTU-13. Random Forest and XGBoost achieve 96% accuracy with real-time inference.
-    * *Uncloak Role:* Justifies lightweight decision-tree ensembles within Uncloak's < 10 MB RAM footprint.
-    * *Ref:* [DOI: 10.1109/INCET61516.2024.10580979](https://doi.org/10.1109/INCET61516.2024.10580979)
-12. **Martijan et al. (2025) - *C2-Based Malware Detection Through Network Analysis Using ML***
-    * *Method:* Behavioral classification across modern C2 families (FormBook, AgentTesla, WarmCookie) at 98% accuracy.
-    * *Uncloak Role:* Demonstrates generalization beyond static Indicators of Compromise (IOCs).
-    * *Ref:* [DOI: 10.1109/CSR64547.2025.10098741](https://doi.org/10.1109/CSR64547.2025.10098741)
+## 4. Machine Learning & Encrypted C2 Classification
+
+9. **Yang, X., Ruan, S., Yue, Y., & Sun, B. (2024) - *PETNet: Plaintext-aware Encrypted Traffic Detection Network for identifying Cobalt Strike HTTPS traffics***
+   * *Publication:* Computer Networks, Elsevier.
+   * *Uncloak Role:* Benchmarks encrypted Cobalt Strike HTTPS traffic classification using flow-level features.
+   * *Ref:* [DOI: 10.1016/j.comnet.2023.110120](https://doi.org/10.1016/j.comnet.2023.110120)
+
+10. **Lo, W. W., Kulatilleke, G. K., Sarhan, M., Layeghy, S., & Portmann, M. (2022) - *XG-BoT: An Explainable Deep Graph Neural Network for Botnet Detection and Forensics***
+    * *Publication:* arXiv preprint.
+    * *Uncloak Role:* Highlights the importance of explainable forensics in automated network detection pipelines.
+    * *Ref:* [arXiv:2207.09088](https://arxiv.org/abs/2207.09088)
 
 ---
 
-## 5. Surgical Eviction & Kernel TCP Teardown
-13. **Bock et al. (2020) - *TCP Reset Attacks in the Wild: Eviction Strategies***
-    * *Method:* Empirical analysis of out-of-band TCP RST injection and TCB state manipulation.
-    * *Uncloak Role:* Formalizes socket eviction without inline proxy interception.
-    * *Ref:* [ACM / USENIX](https://dl.acm.org/doi/10.1145/3419394.3423640)
-14. **Satilmiş et al. (2024) - *A Systematic Review on HIDS: Mitigation Mechanisms***
-    * *Method:* Survey of native programmatic eviction (`SetTcpEntry` on Windows, `ss -K` on Linux). < 5 ms action latency.
-    * *Uncloak Role:* Validates `iphlpapi.SetTcpEntry` as the optimal zero-crash, driverless kernel eviction mechanism.
-    * *Ref:* [DOI: 10.1109/ACCESS.2024.3361280](https://doi.org/10.1109/ACCESS.2024.3361280)
-15. **Sommer, Paxson & Weaver (2021) - *Active TCP Teardown Strategies for Incident Response***
-    * *Method:* Operational evaluation comparing surgical socket termination against host-level network quarantine.
-    * *Uncloak Role:* Demonstrates operational superiority of terminating only the malicious C2 socket while preserving business applications.
-    * *Ref:* [ACM Digital Library](https://dl.acm.org/doi/10.1145/3457912)
+## 5. Surgical Eviction & Containment Trade-offs
+
+11. **Vectra AI - *TCP reset does not stop modern attacks***
+    * *Publication:* Vectra AI Technical Guidance.
+    * *Uncloak Role:* Documents why out-of-band TCP RST alone is insufficient against beacons that open a fresh connection on every sleep cycle, motivating Uncloak's pairing of `SetTcpEntry` with per-application Windows Firewall containment.
+    * *Ref:* [Vectra AI Docs](https://docs.vectra.ai/operations/analyst-guidance/tcp-reset-does-not-stop-modern-attacks)
+
+12. **ExtraHop - *TCP resets and C2: Prevent Command and Control & DoS Attacks***
+    * *Publication:* ExtraHop Technical Blog.
+    * *Uncloak Role:* Evaluates operational strengths and limitations of TCP RST injection for active session disruption.
+    * *Ref:* [ExtraHop Blog](https://www.extrahop.com/blog/tcp-resets-rst-prevent-command-and-control-dos-attacks/)

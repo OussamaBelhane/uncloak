@@ -1,15 +1,16 @@
-# ⚡ Uncloak
+# Uncloak
 
 <p align="center">
   <strong>Autonomous C2 Stealth Jitter Detection & Win32 Socket Attribution Engine</strong>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/uncloak/"><img src="https://img.shields.io/badge/pypi-v0.1.0-blue.svg" alt="PyPI"></a>
-  <a href="https://github.com/OussamaBelhane/uncloak/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI"></a>
   <a href="https://github.com/OussamaBelhane/uncloak/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg" alt="Python Version"></a>
+  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status: Alpha">
 </p>
+
+> **Project Status (Alpha / Active Development):** The UI cockpits (Rich CUI and WebView2 Desktop), SQLite WAL ledger, Fleet Manager state machine (with `--demo` simulated fleet), and core data models are implemented. Live kernel capture, native Win32 `iphlpapi.dll` attribution/eviction, and the trained ML model are currently under active development.
 
 ---
 
@@ -17,22 +18,22 @@
 
 Modern command-and-control (C2) implants (Cobalt Strike, Sliver, Havoc, Brute Ratel) evade traditional network intrusion detection systems by **cloaking** their traffic:
 - Encrypting payloads within standard HTTPS (port 443) traffic.
-- Injecting artificial sleep jitter ($\pm 20-50\%$) to break naive periodic timing rules.
+- Injecting artificial sleep jitter ($\pm 20\text{--}50\%$) to break naive periodic timing rules.
 - Masquerading behind Content Delivery Networks (CDNs) and legitimate cloud hosts.
 - Injecting shellcode into trusted system processes (`svchost.exe`, `explorer.exe`).
 
-**Uncloak** is a lightweight, host-native threat hunting engine that strips away this concealment. By combining high-speed BPF network packet ingestion with real-time Win32 kernel socket tables (`iphlpapi.dll`), Uncloak mathematically isolates subtle beaconing rhythms through the noise and correlates the anomalous connection directly to the offending Windows process ID, binary path, and user token.
+**Uncloak** is a lightweight, host-native threat hunting engine designed to strip away this concealment. By combining packet timing burst analysis with real-time Win32 socket-to-process attribution (`iphlpapi.dll`), Uncloak isolates subtle beaconing rhythms through the noise and correlates anomalous connections directly to the offending Windows process ID, binary path, and signature status.
 
 ---
 
-### Key Capabilities
+### Key Capabilities (Target Architecture)
 
-* **Mathematical Jitter Defeat:** Uses robust statistical estimators (Interquartile Range, Median Absolute Deviation, Spectral Density) to distinguish human browsing bursts from algorithmic C2 sleep loops.
-* **Kernel Socket-to-PID Attribution:** Binds network flows to local Windows processes via native Win32 `GetExtendedTcpTable`, resolving the PID, binary path, and parent hierarchy in real time.
-* **Surgical Socket Mitigation:** Capable of severing malicious connections on demand using `SetTcpEntry(MIB_TCP_STATE_DELETE_TCB)` without terminating the host process.
-* **Calm Terminal Cockpit:** A responsive full-width Console User Interface (CUI) with a collapsible forensic telemetry drawer for active incident response.
-* **Zero Overhead Footprint:** Engineered in high-performance asynchronous Python with ctypes bindings: operates with `< 10 MB` RAM footprint and `< 2%` CPU overhead.
-* **Headless SIEM / SOC Streaming:** Streams structured NDJSON alerts (`-j / --json`) directly to Wazuh, Splunk, or Elastic.
+* **Robust Jitter Analysis:** Uses non-parametric statistical estimators (Median, Median Absolute Deviation, Interquartile Range, Bowley Skew) to distinguish human browsing bursts from algorithmic C2 sleep loops.
+* **Kernel Socket-to-PID Attribution:** Binds network flows to local Windows processes via native Win32 `GetExtendedTcpTable`, resolving the PID, binary path, and parent hierarchy.
+* **Surgical Socket Mitigation & Per-App Containment:** Designed to sever malicious connections on demand using `SetTcpEntry(MIB_TCP_STATE_DELETE_TCB)` and per-application Windows Firewall rules without terminating critical host processes.
+* **Terminal & Desktop Cockpits:** A responsive Rich Console User Interface (CUI) with a collapsible forensic telemetry drawer, plus a WebView2 desktop cockpit for fleet triage.
+* **Audit-First Safety:** Operates in non-disruptive audit/detect mode by default before any active enforcement is enabled.
+* **Headless SIEM / SOC Streaming:** Streams structured NDJSON alerts (`-j / --json`) for Wazuh, Splunk, or Elastic.
 
 ---
 
@@ -90,8 +91,8 @@ pip install -e .
 
 #### 3. Execution Modes on Windows
 
-##### 🌟 Option A: Enterprise Desktop Cockpit (Full GUI - Default on Windows)
-This launches the Central Fleet Manager and opens a dedicated, borderless EDR desktop cockpit window (powered by native Microsoft Edge WebView2 / App Mode):
+##### Option A: Desktop Cockpit & Web UI (Current Alpha Preview / Demo Mode)
+This launches the local Fleet Manager and opens the desktop cockpit window (powered by Microsoft Edge App Mode on Windows):
 ```powershell
 uncloak
 # or explicitly:
@@ -100,38 +101,34 @@ uncloak manager
 python -m uncloak
 ```
 * **Dashboard Localhost URL:** `http://127.0.0.1:8830`
-* **Features:** Live AD Fleet topology (32 hosts, 5,613 sockets), lateral movement graph, STIX 2.1 exporter, YARA-L generator, live triage drawer, and instant socket eviction.
+* **Current Alpha Status:** Runs in simulated demo mode (`32` simulated hosts) to preview the topology graph, triage drawer, and STIX/YARA-L export layout while the live Npcap/WFP collector is being integrated.
 
-##### 💻 Option B: Terminal CUI Cockpit (Console Mode)
-For SOC operators working inside Windows Terminal, PowerShell, or remote SSH/WinRM sessions:
+##### Option B: Terminal CUI Cockpit (Console Mode)
+For SOC operators working inside Windows Terminal, PowerShell, or remote SSH sessions:
 ```powershell
 uncloak cli
 # or:
 python -m uncloak cli
 ```
 * **Controls:**
-  * `[TAB]` : Toggle deep forensic inspection drawer
-  * `[SPACE]` : Pause / resume live packet stream
-  * `[K]` : Kill selected anomalous socket (`SetTcpEntry DELETE_TCB`)
+  * `[TAB]` : Toggle forensic inspection drawer
+  * `[SPACE]` : Pause / resume live stream
+  * `[K]` : Kill selected anomalous socket (`SetTcpEntry DELETE_TCB` - planned)
   * `[Q]` : Quit cleanly
 
-##### 🛡️ Option C: Silent Endpoint Agent (Background Service)
-To run or register Uncloak as a persistent background sensor:
+##### Option C: Silent Endpoint Agent (Target Architecture - In Progress)
+Planned background sensor workflow once the live capture and Windows Service wrapper are implemented:
 ```powershell
-# Run directly in foreground:
+# Run in foreground:
 uncloak agent
 
-# Or install as an automatic Windows boot daemon (Run PowerShell as Administrator):
+# Planned Windows Service lifecycle (Administrator):
 uncloak --install
-
-# Check service status:
 uncloak --status
-
-# Remove service:
 uncloak --uninstall
 ```
 
-##### ⚡ Option D: Portable Quick Run (Zero-Install)
+##### Option D: Portable Quick Run (Zero-Install)
 If you prefer running directly without installing the package into your Python environment:
 ```powershell
 pip install -r requirements.txt
@@ -141,7 +138,9 @@ python -m uncloak
 
 ---
 
-### 🐧 Running on Linux / macOS
+### Running on Linux / macOS (UI & Offline Analysis Preview)
+
+Full active endpoint attribution (`GetExtendedTcpTable`, `WinVerifyTrust`, `SetTcpEntry`) targets Windows 10/11. Linux/macOS supports the UI preview and planned offline PCAP triage:
 
 ```bash
 # Clone and setup
@@ -160,7 +159,7 @@ uncloak manager
 
 ---
 
-### 📂 Offline DFIR PCAP Triage & SOC Streaming
+### Offline DFIR PCAP Triage & SOC Streaming (Planned v1.0 CLI)
 
 #### 1. Replay & Analyze a Captured PCAP
 ```bash
@@ -168,7 +167,7 @@ uncloak -r incident_capture.pcap
 ```
 
 #### 2. Headless SOC / SIEM Streaming
-Output pure line-delimited JSON (NDJSON) to stdout for forwarders (Wazuh, Splunk, Elastic):
+Output line-delimited JSON (NDJSON) to stdout for forwarders (Wazuh, Splunk, Elastic):
 ```bash
 uncloak --live --json > uncloak_alerts.json
 ```
