@@ -65,12 +65,17 @@ uncloak.db*
 uncloak_telemetry*.json
 uncloak_dossier_*.json
 
-# Packet Captures (Strict anti-leak, fixtures explicitly unignored)
+# Packet Captures & Datasets (Strict anti-leak, fixtures explicitly unignored)
 *.pcap
 *.pcapng
 *.cap
 !tests/fixtures/*.pcap
 !tests/fixtures/*.pcapng
+data/raw/
+data/*.csv
+!data/samples/*.csv
+*.parquet
+*.h5
 
 # IDE & Editor caches
 .idea/
