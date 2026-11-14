@@ -276,55 +276,55 @@ def render_pcap_report(
     out_console = console or Console(color_system="truecolor")
     threats = [r for r in results if r.prediction["threat_score"] >= threshold]
     evaluating = [r for r in results if 0.48 <= r.prediction["threat_score"] < threshold]
+    benign_count = max(0, len(results) - len(threats) - len(evaluating))
 
     banner = Text()
-    banner.append("UNCLOAK", style="bold #e5e7eb")
-    banner.append(" // PCAP C2 THREAT HARNESS  |  ", style="#9ca3af")
-    banner.append("CAPTURE: ", style="#6b7280")
-    banner.append(os.path.basename(pcap_path), style="bold #93c5fd")
-    banner.append("  |  ", style="#323846")
-    banner.append("SCHEMA: ", style="#6b7280")
-    banner.append("Feature Schema v1 (12-Dim)", style="#e5e7eb")
+    banner.append("UNCLOAK PCAP HARNESS", style="bold #f8fafc")
+    banner.append("  |  ", style="#475569")
+    banner.append("Capture: ", style="#94a3b8")
+    banner.append(os.path.basename(pcap_path), style="bold #38bdf8")
+    banner.append("  |  ", style="#475569")
+    banner.append("Schema: ", style="#94a3b8")
+    banner.append("Feature Schema v1 (12-Dim Robust IAT)", style="#e2e8f0")
     banner.append("\n")
-    banner.append("Flows Qualified (>=8 bursts): ", style="#9ca3af")
-    banner.append(f"{len(results)}", style="bold #e5e7eb")
-    banner.append("  |  ", style="#323846")
-    banner.append("Confirmed C2 Beacons: ", style="#9ca3af")
-    banner.append(f"{len(threats)}", style="bold #fca5a5" if threats else "#6ee7b7")
-    banner.append("  |  ", style="#323846")
-    banner.append("Watchlist: ", style="#9ca3af")
-    banner.append(f"{len(evaluating)}", style="bold #fcd34d" if evaluating else "#9ca3af")
-    banner.append("  |  ", style="#323846")
-    banner.append(f"Scan Latency: {elapsed_ms:.1f} ms", style="bold #93c5fd")
+    banner.append(f"Qualified Flows (>={min_bursts} bursts): ", style="#94a3b8")
+    banner.append(f"{len(results)}", style="bold #f8fafc")
+    banner.append("  |  ", style="#475569")
+    banner.append("Confirmed C2 Beacons: ", style="#94a3b8")
+    banner.append(f"{len(threats)} CRITICAL" if threats else "0", style="bold #f87171" if threats else "bold #10b981")
+    banner.append("  |  ", style="#475569")
+    banner.append("Benign Baseline: ", style="#94a3b8")
+    banner.append(f"{benign_count} HEALTHY", style="bold #10b981")
+    banner.append("  |  ", style="#475569")
+    banner.append("Scan Latency: ", style="#94a3b8")
+    banner.append(f"{elapsed_ms:.1f} ms", style="bold #38bdf8")
 
     out_console.print(
         Panel(
             banner,
-            title="[bold #e5e7eb] Mode 2 : PCAP Telemetry Replay Harness [/]",
+            title="[bold #f8fafc] Mode 2 : Offline PCAP Telemetry Replay & FlowFeaturesV1 Triage [/]",
             box=box.ROUNDED,
-            style="on #101217",
-            border_style="#262b38",
+            border_style="#334155",
             padding=(0, 1),
         )
     )
 
     tbl = Table(
         box=box.ROUNDED,
-        style="on #101217",
-        border_style="#262b38",
-        header_style="bold #9ca3af on #14171f",
+        border_style="#334155",
+        header_style="bold #94a3b8",
         expand=True,
     )
     tbl.add_column("FLOW (SRC -> DST:PORT)", min_width=32, no_wrap=True)
-    tbl.add_column("DNS / SNI CONTEXT", min_width=19, no_wrap=True)
+    tbl.add_column("DNS / SNI CONTEXT", min_width=20, no_wrap=True)
     tbl.add_column("BURSTS", width=6, justify="right", no_wrap=True)
-    tbl.add_column("IAT MED", width=7, justify="right", no_wrap=True)
+    tbl.add_column("IAT MED", width=8, justify="right", no_wrap=True)
     tbl.add_column("MAD", width=7, justify="right", no_wrap=True)
     tbl.add_column("IQR", width=7, justify="right", no_wrap=True)
     tbl.add_column("SKEW", width=7, justify="right", no_wrap=True)
     tbl.add_column("CONN/B", width=6, justify="right", no_wrap=True)
     tbl.add_column("DUR", width=7, justify="right", no_wrap=True)
-    tbl.add_column("SCORE & VERDICT", width=18, justify="right", no_wrap=True)
+    tbl.add_column("SCORE & VERDICT", width=16, justify="right", no_wrap=True)
 
     if not results:
         tbl.add_row("No qualifying TCP burst streams found", "-", "0", "-", "-", "-", "-", "-", "-", "BENIGN")
@@ -337,12 +337,12 @@ def render_pcap_report(
             is_bad = score >= threshold
             is_eval = 0.48 <= score < threshold
 
-            flow_style = "bold #fca5a5" if is_bad else ("bold #fcd34d" if is_eval else "#d1d5db")
+            flow_style = "bold #fca5a5" if is_bad else ("bold #fcd34d" if is_eval else "#cbd5e1")
             sni_text = Text(
                 item.resolved_domain if item.resolved_domain else "Direct IP (No DNS)",
-                style="bold #fca5a5" if (f.raw_ip_flag == 1 and is_bad) else ("#d1d5db" if item.resolved_domain else "#6b7280"),
+                style="bold #f87171" if (f.raw_ip_flag == 1 and is_bad) else ("#e2e8f0" if item.resolved_domain else "#64748b"),
             )
-            mad_style = "bold #fca5a5" if f.iat_mad_ratio <= 0.18 else ("#fcd34d" if f.iat_mad_ratio <= 0.30 else "#9ca3af")
+            mad_style = "bold #f87171" if f.iat_mad_ratio <= 0.18 else ("#f59e0b" if f.iat_mad_ratio <= 0.30 else "#94a3b8")
 
             verdict_txt = Text()
             if lvl == "CRITICAL":
@@ -352,9 +352,8 @@ def render_pcap_report(
             elif lvl == "EVALUATING":
                 verdict_txt.append(f" {score * 100:.1f}% EVAL ", style="bold black on #eab308")
             else:
-                verdict_txt.append(f"  {score * 100:.1f}% OK   ", style="#6b7280")
+                verdict_txt.append(f"  {score * 100:.1f}% OK   ", style="#10b981")
 
-            row_bg = "on #160d10" if is_bad else ("on #161412" if is_eval else "on #101217")
             tbl.add_row(
                 Text(item.flow_key, style=flow_style),
                 sni_text,
@@ -366,53 +365,63 @@ def render_pcap_report(
                 f"{f.conn_per_burst:.2f}",
                 _format_duration(item.duration_sec),
                 verdict_txt,
-                style=row_bg,
             )
 
     out_console.print(tbl)
 
     if threats or evaluating:
         cards_grid = Table.grid(expand=True, padding=(0, 1))
-        for _ in range(min(3, len(threats + evaluating))):
+        num_cards = min(3, len(threats + evaluating))
+        for _ in range(num_cards):
             cards_grid.add_column(ratio=1)
 
+        card_val_w = max(24, (out_console.width // max(1, num_cards)) - 17)
         card_panels = []
         for idx, item in enumerate((threats + evaluating)[:3], start=1):
             pred = item.prediction
             lvl = pred["confidence_level"]
-            title_c = "#fca5a5" if lvl == "CRITICAL" else ("#fcd34d" if lvl == "HIGH" else "#fde047")
-            border_c = "#7f1d1d" if lvl == "CRITICAL" else ("#92400e" if lvl == "HIGH" else "#713f12")
+            title_c = "#f87171" if lvl == "CRITICAL" else ("#f59e0b" if lvl == "HIGH" else "#fde047")
+            border_c = "#991b1b" if lvl == "CRITICAL" else ("#92400e" if lvl == "HIGH" else "#713f12")
 
-            profile_str = str(pred["c2_profile_hint"])[:36]
-            flow_str = item.flow_key[:36]
-            mitre_str = str(pred["mitre_technique"])[:36]
+            profile_str = str(pred["c2_profile_hint"])[:card_val_w]
+            flow_str = item.flow_key[:card_val_w]
+            dns_str = (item.resolved_domain if item.resolved_domain else "Direct IP (No SNI/DNS)")[:card_val_w]
+            mitre_str = str(pred["mitre_technique"])[:card_val_w]
             f = item.features
-            sig_str = f"MAD {f.iat_mad_ratio:.3f} | IQR {f.iat_iqr_ratio:.3f} | RawIP={f.raw_ip_flag}"[:36]
-            wfp_str = f"EID 9001 -> block {item.dst_ip}"[:36]
+            sig_str = f"MAD {f.iat_mad_ratio:.3f} | IQR {f.iat_iqr_ratio:.3f} | Raw={f.raw_ip_flag}"[:card_val_w]
+            wfp_str = f"EID 9001 -> block {item.dst_ip}"[:card_val_w]
 
             body = Text()
-            body.append("Profile : ", style="#6b7280")
-            body.append(f"{profile_str}\n", style="bold #e5e7eb")
-            body.append("Flow    : ", style="#6b7280")
-            body.append(f"{flow_str}\n", style="#93c5fd")
-            body.append("MITRE   : ", style="#6b7280")
-            body.append(f"{mitre_str}\n", style="#fcd34d")
-            body.append("Signal  : ", style="#6b7280")
+            body.append("Profile : ", style="#94a3b8")
+            body.append(f"{profile_str}\n", style="bold #f8fafc")
+            body.append("Flow    : ", style="#94a3b8")
+            body.append(f"{flow_str}\n", style="#38bdf8")
+            body.append("DNS/SNI : ", style="#94a3b8")
+            body.append(f"{dns_str}\n", style="#f87171" if f.raw_ip_flag == 1 else "#cbd5e1")
+            body.append("MITRE   : ", style="#94a3b8")
+            body.append(f"{mitre_str}\n", style="#f59e0b")
+            body.append("Signal  : ", style="#94a3b8")
             body.append(f"{sig_str}\n", style="#fca5a5" if lvl != "EVALUATING" else "#fde047")
-            body.append("SIEM/FW : ", style="#6b7280")
-            body.append(wfp_str, style="#6ee7b7")
+            body.append("Action  : ", style="#94a3b8")
+            body.append(wfp_str, style="#10b981")
 
             card_panels.append(
                 Panel(
                     body,
                     title=f"[bold {title_c}] Finding #{idx} : {lvl} ({pred['threat_score']*100:.1f}%) [/]",
                     box=box.ROUNDED,
-                    style="on #0c0e13",
                     border_style=border_c,
                     padding=(0, 1),
                 )
             )
         cards_grid.add_row(*card_panels)
         out_console.print(cards_grid)
+
+        tip = Text()
+        tip.append("Tip: ", style="bold #94a3b8")
+        tip.append("Append ", style="#64748b")
+        tip.append("'--json'", style="bold #38bdf8")
+        tip.append(" to stream OCSF v1.1.0 NDJSON records for jq / Splunk / Wazuh ingestion.", style="#64748b")
+        out_console.print(tip)
 
     return 0

@@ -185,43 +185,56 @@ def render_service_console_preview(
     ndjson_path: str,
     win_ev_statuses: list[tuple[int, bool, str]],
 ) -> None:
-    """Renders a crisp operational summary of Mode 1 (Headless Service & Enterprise SIEM Sink)."""
+    """Renders a compact enterprise SIEM verification card for Mode 1 (<= 20 terminal rows)."""
+    ev0 = events[0] if events else {}
+    dev0 = ev0.get("device", {})
+    hostname = dev0.get("hostname", "ENDPOINT")
+    host_ip = dev0.get("ip", "127.0.0.1")
+
+    eid_status_parts: list[str] = []
+    for eid, ok, msg in win_ev_statuses[:2]:
+        tag = "Written" if ok else "Queued/NDJSON"
+        eid_status_parts.append(f"EID {eid}: {tag}")
+    win_ev_summary = " | ".join(eid_status_parts) if eid_status_parts else "EID 9001 / 9002 Armed"
+
     banner = Text()
-    banner.append("UNCLOAK HEADLESS ENTERPRISE SENSOR", style="bold #e5e7eb")
-    banner.append("  |  ", style="#323846")
-    banner.append("ZERO-UI WINDOWS DAEMON", style="bold #93c5fd")
-    banner.append("  |  ", style="#323846")
-    banner.append("NO LISTENING PORTS", style="#9ca3af")
-    banner.append("\n")
-    banner.append("SIEM Sinks: ", style="#9ca3af")
-    banner.append("Windows Event Log (EID 9001 / 9002)", style="bold #fcd34d")
-    banner.append("  +  ", style="#323846")
-    banner.append(f"OCSF v1.1.0 NDJSON ({os.path.basename(ndjson_path)})", style="bold #93c5fd")
+    banner.append("UNCLOAK SENSOR", style="bold #f8fafc")
+    banner.append("  |  ", style="#475569")
+    banner.append("ACTIVE (0 Listening Ports)", style="bold #10b981")
+    banner.append("  |  ", style="#475569")
+    banner.append("Host: ", style="#94a3b8")
+    banner.append(f"{hostname} ({host_ip})", style="bold #e2e8f0")
+    banner.append("  |  ", style="#475569")
+    banner.append("Context: ", style="#94a3b8")
+    banner.append("Headless SYSTEM Daemon\n", style="#cbd5e1")
+    banner.append("SIEM Sinks     : ", style="#94a3b8")
+    banner.append(f"WinEventLog Application ({win_ev_summary})", style="#38bdf8")
+    banner.append("  +  ", style="#475569")
+    banner.append(f"OCSF v1.1.0 NDJSON ({os.path.basename(ndjson_path)})", style="bold #10b981")
 
     console.print(
         Panel(
             banner,
-            title="[bold #e5e7eb] Mode 1 : Headless Endpoint Service & SIEM Pipeline [/]",
+            title="[bold #f8fafc] Mode 1 : Headless Endpoint Sensor & SIEM Verification [/]",
             box=box.ROUNDED,
-            style="on #101217",
-            border_style="#262b38",
+            border_style="#334155",
             padding=(0, 1),
         )
     )
 
     tbl = Table(
-        title="ENTERPRISE SIEM TELEMETRY QUEUE (SPLUNK / WAZUH / SENTINEL READY)",
+        title="DISPATCHED SIEM TELEMETRY QUEUE (SPLUNK / WAZUH / SENTINEL READY)",
+        title_style="bold #cbd5e1",
         box=box.ROUNDED,
-        style="on #101217",
-        border_style="#262b38",
-        header_style="bold #9ca3af on #14171f",
+        border_style="#334155",
+        header_style="bold #94a3b8",
         expand=True,
     )
     is_wide = console.width >= 120
     tbl.add_column("EID", width=6, min_width=6, no_wrap=True)
     tbl.add_column("SEV", width=9 if is_wide else 8, min_width=8, no_wrap=True)
-    tbl.add_column("HOST :: PROCESS (PID)", min_width=28 if is_wide else 12, no_wrap=is_wide, ratio=None if is_wide else 2)
-    tbl.add_column("5-TUPLE FLOW", min_width=36 if is_wide else 14, no_wrap=is_wide, ratio=None if is_wide else 2)
+    tbl.add_column("HOST :: PROCESS (PID)", min_width=26 if is_wide else 12, no_wrap=is_wide, ratio=None if is_wide else 2)
+    tbl.add_column("5-TUPLE SOCKET FLOW", min_width=34 if is_wide else 14, no_wrap=is_wide, ratio=None if is_wide else 2)
     tbl.add_column("MAD & SCORE", min_width=18 if is_wide else 11, no_wrap=is_wide, ratio=None if is_wide else 1)
     tbl.add_column("CONTAINMENT & EVENT SINK", ratio=1 if is_wide else 2)
 
@@ -236,62 +249,66 @@ def render_service_console_preview(
         tel = ev.get("uncloak_telemetry", {})
         feats = tel.get("features_v1", {})
 
-        eid_txt = Text(f" {eid} ", style="bold white on #b91c1c" if eid == 9001 else "bold #93c5fd on #1b202b")
-        sev_txt = Text(sev, style="bold #fca5a5" if sev == "CRITICAL" else "bold #fcd34d")
-        proc_txt = Text(f"{dev.get('hostname', 'HOST')} :: {proc.get('name', '?')} ({proc.get('pid', 0)})", style="bold #e5e7eb")
-        flow_txt = Text(f"{src.get('ip')}:{src.get('port')} -> {dst.get('ip')}:{dst.get('port')}", style="#d1d5db")
+        eid_txt = Text(
+            f" {eid} ",
+            style="bold white on #b91c1c" if eid == 9001 else "bold white on #1d4ed8",
+        )
+        sev_txt = Text(sev, style="bold #f87171" if sev == "CRITICAL" else "bold #f59e0b")
+        proc_txt = Text(f"{dev.get('hostname', 'HOST')} :: {proc.get('name', '?')} ({proc.get('pid', 0)})", style="bold #f8fafc")
+        flow_txt = Text(f"{src.get('ip')}:{src.get('port')} -> {dst.get('ip')}:{dst.get('port')}", style="#cbd5e1")
         mad_val = feats.get("iat_mad_ratio", 0.0)
         score_val = tel.get("threat_score", 0.0) * 100.0
-        stat_txt = Text(f"MAD {mad_val:.3f} | {score_val:.1f}%", style="bold #fca5a5")
+        stat_txt = Text(f"MAD {mad_val:.3f} | {score_val:.1f}%", style="bold #f87171")
 
         ev_status_msg = win_ev_statuses[idx][2] if idx < len(win_ev_statuses) else "OCSF NDJSON Sink"
+        ev_status_msg = ev_status_msg.replace("WinEvent EID ", "EID ")
         action_short = tel.get("containment_action", "")
-        if len(action_short) > 40:
-            action_short = action_short.split("(")[0].strip() if "SetTcpEntry" in action_short else action_short[:38]
-        sink_txt = Text(f"{action_short} | {ev_status_msg}", style="#6ee7b7" if eid == 9002 else "#9ca3af")
+        if len(action_short) > 30:
+            action_short = action_short.split("(")[0].strip() if "SetTcpEntry" in action_short else action_short[:28]
+        sink_txt = Text(f"{action_short} | {ev_status_msg}", style="#10b981" if eid == 9002 else "#94a3b8")
 
         tbl.add_row(eid_txt, sev_txt, proc_txt, flow_txt, stat_txt, sink_txt)
 
     console.print(tbl)
 
     if events:
-        ev0 = events[0]
-        # Render compact OCSF v1.1.0 schema excerpt + raw single-line NDJSON stream preview
-        compact_ocsf = {
-            "metadata": {
-                "version": ev0["metadata"]["version"],
-                "log_provider": ev0["metadata"]["log_provider"],
-                "windows_event_id": ev0["metadata"]["windows_event_id"],
-                "logged_time": ev0["metadata"]["logged_time"],
+        grid = Table.grid(expand=True, padding=(0, 2))
+        grid.add_column(ratio=1, no_wrap=True)
+        grid.add_column(ratio=1, no_wrap=True)
+
+        left_col = Text()
+        left_col.append("Schema    : ", style="#94a3b8")
+        left_col.append("OCSF v1.1.0 Network Activity (class_uid: 4001)\n", style="#e2e8f0")
+        left_col.append("Event IDs : ", style="#94a3b8")
+        left_col.append("EID 9001 (C2 Detected) + EID 9002 (TCB Severed)\n", style="#38bdf8")
+        left_col.append("Telemetry : ", style="#94a3b8")
+        left_col.append("12-Dim FlowFeaturesV1 + JA4 + ProcessGuid", style="#cbd5e1")
+
+        ndjson_base = os.path.basename(ndjson_path)
+        compact_sample = json.dumps(
+            {
+                "class_uid": ev0.get("class_uid", 4001),
+                "severity": ev0.get("severity", "Critical"),
+                "score": round(float(ev0.get("uncloak_telemetry", {}).get("threat_score", 0.0)), 3),
             },
-            "class_uid": ev0["class_uid"],
-            "activity_name": ev0["activity_name"],
-            "severity": ev0["severity"],
-            "src_endpoint": ev0["src_endpoint"],
-            "dst_endpoint": ev0["dst_endpoint"],
-            "actor_process": {
-                "pid": ev0["actor"]["process"]["pid"],
-                "name": ev0["actor"]["process"]["name"],
-                "uid": ev0["actor"]["process"]["uid"],
-                "is_signed": ev0["actor"]["process"]["is_signed"],
-            },
-            "uncloak_telemetry": {
-                "threat_score": ev0["uncloak_telemetry"]["threat_score"],
-                "c2_framework": ev0["uncloak_telemetry"]["c2_framework"],
-                "features_v1": ev0["uncloak_telemetry"]["features_v1"],
-            },
-        }
-        ndjson_preview = Text()
-        ndjson_preview.append(json.dumps(compact_ocsf, indent=2), style="#d1d5db")
-        ndjson_preview.append("\n\nNDJSON Stream (Line 1 -> Splunk/Wazuh):\n", style="bold #93c5fd")
-        ndjson_preview.append(json.dumps(ev0, separators=(",", ":"))[:144] + "...", style="#6b7280")
+            separators=(",", ":"),
+        )
+
+        right_col = Text()
+        right_col.append("NDJSON Sink : ", style="#94a3b8")
+        right_col.append(f"{ndjson_base} ({len(events)} records appended)\n", style="#10b981")
+        right_col.append("Sample Line : ", style="#94a3b8")
+        right_col.append(f"{compact_sample}\n", style="#64748b")
+        right_col.append("Raw Stream  : ", style="#94a3b8")
+        right_col.append("Run 'uncloak service --once --json' for full OCSF stdout", style="bold #38bdf8")
+
+        grid.add_row(left_col, right_col)
         console.print(
             Panel(
-                ndjson_preview,
-                title="[bold #e5e7eb] OCSF v1.1.0 Network Activity Payload (class_uid: 4001) [/]",
+                grid,
+                title="[bold #f8fafc] OCSF v1.1.0 Schema Verification & Ingestion Summary [/]",
                 box=box.ROUNDED,
-                style="on #0c0e13",
-                border_style="#262b38",
+                border_style="#334155",
                 padding=(0, 1),
             )
         )

@@ -357,10 +357,71 @@ class UncloakAgentService:
         return run_cockpit(demo_mode=True)
 
 
-def install_windows_service() -> bool:
+def _compact_bin_cmd(python_exe: str, max_len: int = 58) -> str:
+    """Formats binary command cleanly without awkward wrapping on 80-column consoles."""
+    full = f"{python_exe} -m uncloak.agent.service"
+    if len(full) <= max_len:
+        return full
+    exe_short = os.path.basename(python_exe)
+    parent_name = os.path.basename(os.path.dirname(python_exe))
+    prefix = f"...\\{parent_name}\\{exe_short} -m uncloak.agent.service"
+    if len(prefix) <= max_len:
+        return prefix
+    return f"{exe_short} -m uncloak.agent.service"
+
+
+def _render_service_lifecycle_panel(
+    title: str,
+    state_label: str,
+    state_style: str,
+    rows: list[tuple[str, str, str]],
+    hint: Optional[str] = None,
+    console: Optional[object] = None,
+) -> None:
+    """Renders an enterprise Windows SYSTEM service lifecycle status panel."""
+    from rich import box
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+
+    out = console or Console(color_system="truecolor")
+    body = Text()
+    body.append("Service Task   : ", style="#94a3b8")
+    body.append("UncloakEndpointAgent", style="bold #f8fafc")
+    body.append("    |    ", style="#475569")
+    body.append("State : ", style="#94a3b8")
+    body.append(f"{state_label}\n", style=state_style)
+
+    for label, value, val_style in rows:
+        body.append(f"{label:<15}: ", style="#94a3b8")
+        body.append(f"{value}\n", style=val_style)
+
+    if hint:
+        body.append("Next Action    : ", style="#94a3b8")
+        body.append(hint, style="#38bdf8")
+
+    out.print(
+        Panel(
+            body,
+            title=f"[bold #f8fafc] {title} [/]",
+            box=box.ROUNDED,
+            border_style="#334155",
+            padding=(0, 1),
+        )
+    )
+
+
+def install_windows_service(console: Optional[object] = None) -> bool:
     """Installs Uncloak Agent as a silent background SYSTEM task on Windows boot."""
     if sys.platform != "win32":
-        print("[-] Windows startup service installation is supported on Windows only.")
+        _render_service_lifecycle_panel(
+            "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+            "UNSUPPORTED OS",
+            "bold #f59e0b",
+            [("Platform", sys.platform, "#cbd5e1")],
+            hint="Windows Task Scheduler registration requires Windows (Win32 API).",
+            console=console,
+        )
         return False
 
     pythonw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
@@ -384,42 +445,114 @@ def install_windows_service() -> bool:
         "/f",
     ]
     res = subprocess.run(cmd, shell=False, capture_output=True, text=True)
+    bin_cmd = _compact_bin_cmd(pythonw)
     if res.returncode == 0:
-        print(f"[+] Successfully registered '{task_name}' in Windows Task Scheduler.")
-        print("[+] Startup Mode : Starts automatically on PC boot (NT AUTHORITY\\SYSTEM).")
-        print("[+] Visibility   : Headless background daemon (0% taskbar, 0% system tray).")
-        print("[+] Resiliency   : Runs under SYSTEM with HIGHEST integrity privileges.")
+        _render_service_lifecycle_panel(
+            "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+            "REGISTERED & ARMED",
+            "bold #10b981",
+            [
+                ("Privilege", "NT AUTHORITY\\SYSTEM (HIGHEST Integrity)", "#cbd5e1"),
+                ("Binary Path", bin_cmd, "#e2e8f0"),
+                ("Visibility", "Headless Daemon (0% taskbar, 0 listening ports)", "#cbd5e1"),
+            ],
+            hint="Run 'uncloak --status' to verify SCM trigger state.",
+            console=console,
+        )
         return True
-    else:
-        print(f"[-] Installation failed (Requires Administrator privileges): {res.stderr.strip()}")
-        return False
+
+    err_msg = (res.stderr or res.stdout or "Access denied").strip()
+    _render_service_lifecycle_panel(
+        "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+        "ELEVATION REQUIRED",
+        "bold #f87171",
+        [
+            ("Privilege", "NT AUTHORITY\\SYSTEM (Administrator Shell Required)", "#cbd5e1"),
+            ("Binary Path", bin_cmd, "#94a3b8"),
+            ("SCM Detail", err_msg[:58], "#fca5a5"),
+        ],
+        hint="Re-run from an elevated Administrator PowerShell / cmd.",
+        console=console,
+    )
+    return False
 
 
-def uninstall_windows_service() -> bool:
+def uninstall_windows_service(console: Optional[object] = None) -> bool:
     """Removes the Uncloak Agent background task from Windows."""
     task_name = "UncloakEndpointAgent"
     cmd = ["schtasks", "/delete", "/tn", task_name, "/f"]
     res = subprocess.run(cmd, shell=False, capture_output=True, text=True)
     if res.returncode == 0:
-        print(f"[+] Successfully removed '{task_name}' from Windows startup.")
+        _render_service_lifecycle_panel(
+            "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+            "REMOVED",
+            "bold #10b981",
+            [("Action", f"Deleted '{task_name}' from Windows Task Scheduler", "#cbd5e1")],
+            hint="Run 'uncloak --install' as Administrator to re-register.",
+            console=console,
+        )
         return True
-    else:
-        print(f"[-] Uninstallation failed: {res.stderr.strip()}")
-        return False
+
+    err_msg = (res.stderr or res.stdout or "Task not present or access denied").strip()
+    _render_service_lifecycle_panel(
+        "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+        "UNINSTALL FAILED",
+        "bold #f87171",
+        [("SCM Detail", err_msg[:110], "#fca5a5")],
+        hint="Verify task exists via 'uncloak --status' or run as Administrator.",
+        console=console,
+    )
+    return False
 
 
-def query_service_status() -> None:
+def query_service_status(console: Optional[object] = None) -> None:
     """Queries the running state of the Uncloak Agent Windows task."""
     task_name = "UncloakEndpointAgent"
     cmd = ["schtasks", "/query", "/tn", task_name, "/fo", "LIST"]
     res = subprocess.run(cmd, shell=False, capture_output=True, text=True)
+    pythonw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    if not os.path.exists(pythonw):
+        pythonw = sys.executable
+
+    bin_cmd = _compact_bin_cmd(pythonw)
     if res.returncode == 0:
-        print(f"[*] Task '{task_name}' is installed and active in Windows:")
+        parsed_rows: list[tuple[str, str, str]] = [
+            ("Privilege", "NT AUTHORITY\\SYSTEM", "#cbd5e1"),
+            ("Binary Path", bin_cmd, "#e2e8f0"),
+        ]
+        scm_state = "INSTALLED"
         for line in res.stdout.splitlines():
-            if any(k in line for k in ["TaskName", "Status", "Next Run Time", "Last Run Time", "Author"]):
-                print(f"    {line.strip()}")
+            if ":" in line:
+                k, _, v = line.partition(":")
+                key = k.strip()
+                val = v.strip()
+                if key == "Status":
+                    scm_state = val.upper() or "READY"
+                elif key in ("Next Run Time", "Last Run Time", "Author"):
+                    parsed_rows.append((key, val, "#cbd5e1"))
+
+        state_style = "bold #10b981" if scm_state in ("RUNNING", "READY") else "bold #f59e0b"
+        _render_service_lifecycle_panel(
+            "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+            scm_state,
+            state_style,
+            parsed_rows,
+            hint="Run 'uncloak service --once' to verify OCSF + EID 9001/9002.",
+            console=console,
+        )
     else:
-        print(f"[-] Task '{task_name}' is NOT installed in Windows Task Scheduler.")
+        _render_service_lifecycle_panel(
+            "Windows SYSTEM Service Lifecycle (UncloakSensor)",
+            "NOT INSTALLED",
+            "bold #f59e0b",
+            [
+                ("Privilege", "NT AUTHORITY\\SYSTEM (On Boot / HIGHEST)", "#94a3b8"),
+                ("Binary Path", bin_cmd, "#94a3b8"),
+                ("Endpoint Mode", "Manual CLI / On-Demand Execution Only", "#cbd5e1"),
+            ],
+            hint="Run 'uncloak --install' (as Admin) to deploy SYSTEM sensor.",
+            console=console,
+        )
 
 
 def main(args: Optional[list[str]] = None) -> int:
@@ -457,10 +590,8 @@ def main(args: Optional[list[str]] = None) -> int:
         render_service_console_preview(console, events, out_path, statuses)
         return 0
 
-    print(f"[*] Uncloak Headless Endpoint Sensor initialized on [{agent.hostname}]")
-    print(f"[*] SIEM Sink Active: Windows Event Log (EID 9001/9002) + OCSF NDJSON ({parsed.siem_out})")
-    print(f"[*] Optional Fleet Heartbeat Target: {agent.manager_url} (Heartbeat: 15s)")
-    print("[*] Attack Surface: Zero UI ports opened on endpoint")
+    from uncloak.cli.parser import _print_service_startup_banner
+    _print_service_startup_banner(agent, parsed.siem_out)
     agent.start(daemon=False)
     return 0
 

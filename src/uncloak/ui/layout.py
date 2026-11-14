@@ -198,14 +198,13 @@ def render_header(state: CockpitState, width: int = 120) -> RenderableType:
     return Panel(
         header_text,
         box=box.ROUNDED,
-        style="on #101217",
-        border_style="#262b38",
+        border_style="#334155",
         padding=(0, 1),
     )
 
 
 def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120, threat_num: int = 1, total_threats: int = 3) -> Optional[RenderableType]:
-    """Renders pinned MITRE ATT&CK alert strictly matching the reference with harmonious contrast."""
+    """Renders pinned MITRE ATT&CK alert strictly matching the enterprise dark palette."""
     if not top_threat or not top_threat.is_threat:
         return None
 
@@ -219,8 +218,8 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120, threa
     l1.append("CRITICAL C2 BEACON ISOLATED", style="bold #fca5a5")
 
     r1 = Text()
-    r1.append("MITRE ATT&CK: ", style="#9ca3af")
-    r1.append("T1071.001", style="bold #e5e7eb")
+    r1.append("MITRE ATT&CK: ", style="#94a3b8")
+    r1.append("T1071.001", style="bold #f8fafc")
 
     sp1 = max(1, inner_w - len(l1.plain) - len(r1.plain))
     row1 = Text()
@@ -230,12 +229,12 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120, threa
 
     # Row 2
     l2 = Text()
-    l2.append("TARGET: ", style="#9ca3af")
+    l2.append("TARGET: ", style="#94a3b8")
     c2_tag = f" ({top_threat.c2_framework.split('(')[0].strip()[:18]})" if top_threat.c2_framework else ""
     l2.append(f"{top_threat.dst_ip}:{top_threat.dst_port}{c2_tag}", style="bold #fca5a5")
-    l2.append(" │ ", style="#323846")
-    l2.append("PID: ", style="#9ca3af")
-    l2.append(f"{top_threat.pid} ({top_threat.process_name})", style="bold #e5e7eb")
+    l2.append(" │ ", style="#475569")
+    l2.append("PID: ", style="#94a3b8")
+    l2.append(f"{top_threat.pid} ({top_threat.process_name})", style="bold #f8fafc")
 
     r2 = Text()
     if top_threat.is_severed:
@@ -248,9 +247,9 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120, threa
         action_style = "bold #fcd34d"
 
     r2.append(action_str, style=action_style)
-    r2.append(" │ ", style="#323846")
-    r2.append("EVENT: ", style="#9ca3af")
-    r2.append(eid_str, style="bold #e5e7eb")
+    r2.append(" │ ", style="#475569")
+    r2.append("EVENT: ", style="#94a3b8")
+    r2.append(eid_str, style="bold #f8fafc")
 
     sp2 = max(1, inner_w - len(l2.plain) - len(r2.plain))
     row2 = Text()
@@ -267,7 +266,7 @@ def render_pinned_alert(top_threat: Optional[FlowEntry], width: int = 120, threa
         content,
         box=box.ROUNDED,
         style="on #160d10",
-        border_style="#7f1d1d",
+        border_style="#991b1b",
         padding=(0, 1),
     )
 
@@ -324,15 +323,15 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
         track_after = "──────────────"
 
     if track_before:
-        sh_right.append(track_before, style="#262b38")
-    sh_right.append("▬▬", style="bold #e5e7eb")
+        sh_right.append(track_before, style="#334155")
+    sh_right.append("▬▬", style="bold #f8fafc")
     if track_after:
-        sh_right.append(track_after, style="#262b38")
-    sh_right.append(f"  {pct_val}%", style="#6b7280")
-    sh_right.append(" │ ", style="#323846")
-    sh_right.append("[ENTER] Toggle Drawer", style="#9ca3af")
+        sh_right.append(track_after, style="#334155")
+    sh_right.append(f"  {pct_val}%", style="#64748b")
+    sh_right.append(" │ ", style="#475569")
+    sh_right.append("[ENTER] Drawer  [I] Dossier", style="#94a3b8")
 
-    sh.add_row(sh_left, sh_right, style="on #101217")
+    sh.add_row(sh_left, sh_right)
 
     # Dynamic Column Headers matching active sort field
     hdr_pid = "PID ▲" if state.sort_field == "pid" else "PID"
@@ -349,7 +348,7 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
         expand=True,
         pad_edge=False,
         show_header=True,
-        header_style="bold #9ca3af on #14171f",
+        header_style="bold #94a3b8 on #1e293b",
     )
     if width >= 150:
         table.add_column(hdr_pid, width=10, no_wrap=True)
@@ -460,26 +459,25 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
             else:
                 c_thr.append(f"  {flow.threat_score * 100:.1f}% OK   ", style="#6b7280")
 
-            # Row background style
+            # Row background style (selected cursor highlight only; inherits native terminal bg)
             if is_severed:
-                row_bg = "on #181c26" if is_selected else "on #101217"
+                row_bg = "on #1e293b" if is_selected else ""
             elif is_threat:
-                row_bg = "on #261216" if is_selected else "on #160d10"
+                row_bg = "on #2a1215" if is_selected else "on #160d10"
             else:
-                row_bg = "on #181c26" if is_selected else "on #101217"
+                row_bg = "on #1e293b" if is_selected else ""
 
             table.add_row(c_pid, c_proc, c_dst, c_sni, c_int, c_pay, c_thr, style=row_bg)
 
     container = Table.grid(expand=True)
     container.add_column()
-    container.add_row(sh, style="on #101217")
-    container.add_row(table, style="on #101217")
+    container.add_row(sh)
+    container.add_row(table)
 
     return Panel(
         container,
         box=box.ROUNDED,
-        style="on #101217",
-        border_style="#262b38",
+        border_style="#334155",
         padding=(0, 1),
     )
 
@@ -523,17 +521,17 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     rule_w = max(4, width - len(left_str) - len(right_str) - 3)
 
     dt = Text()
-    dt.append("── ", style="#323846")
-    dt_color = "bold #93c5fd" if selected_flow.is_severed else ("bold #fca5a5" if selected_flow.is_threat else "bold #e5e7eb")
+    dt.append("── ", style="#475569")
+    dt_color = "bold #93c5fd" if selected_flow.is_severed else ("bold #fca5a5" if selected_flow.is_threat else "bold #f8fafc")
     dt.append(f"DETAIL : {selected_flow.dst_ip}:{selected_flow.dst_port} (PID {selected_flow.pid})", style=dt_color)
-    dt.append(" ", style="#323846")
-    dt.append("─" * rule_w, style="#262b38")
-    dt.append(" [", style="#6b7280")
-    dt.append("ENTER", style="bold #e5e7eb")
-    dt.append("] Collapse  [", style="#6b7280")
-    dt.append("I", style="bold #93c5fd")
-    dt.append("] Dossier ", style="#6b7280")
-    dt.append("──", style="#323846")
+    dt.append(" ", style="#475569")
+    dt.append("─" * rule_w, style="#334155")
+    dt.append(" [", style="#94a3b8")
+    dt.append("ENTER", style="bold #f8fafc")
+    dt.append("] Collapse  [", style="#94a3b8")
+    dt.append("I", style="bold #38bdf8")
+    dt.append("] Dossier ", style="#94a3b8")
+    dt.append("──", style="#475569")
 
     # Card 1: Host & Kernel Attribution - Strictly 6 clean lines
     c1 = Text()
@@ -566,10 +564,9 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     p1 = Panel(
         c1,
-        title="[bold #e5e7eb] 01 / Host & Kernel Attribution [/]",
+        title="[bold #f8fafc] 01 / Host & Kernel Attribution [/]",
         box=box.ROUNDED,
-        style="on #0c0e13",
-        border_style="#262b38",
+        border_style="#334155",
         padding=(0, 1),
     )
 
@@ -607,10 +604,9 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     p2 = Panel(
         c2,
-        title="[bold #e5e7eb] 02 / Cadence & IAT Signal (v1) [/]",
+        title="[bold #f8fafc] 02 / Cadence & IAT Signal (v1) [/]",
         box=box.ROUNDED,
-        style="on #0c0e13",
-        border_style="#262b38",
+        border_style="#334155",
         padding=(0, 1),
     )
 
@@ -659,10 +655,9 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     p3 = Panel(
         c3,
-        title="[bold #e5e7eb] 03 / Containment & SIEM Audit [/]",
+        title="[bold #f8fafc] 03 / Containment & SIEM Audit [/]",
         box=box.ROUNDED,
-        style="on #0c0e13",
-        border_style="#262b38",
+        border_style="#334155",
         padding=(0, 1),
     )
 
@@ -674,94 +669,206 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
     drawer_grid = Table.grid(expand=True)
     drawer_grid.add_column()
-    drawer_grid.add_row(dt, style="on #090a0d")
-    drawer_grid.add_row(dg, style="on #090a0d")
+    drawer_grid.add_row(dt)
+    drawer_grid.add_row(dg)
 
     return drawer_grid
 
 
+def _clip_dossier_value(value: str, max_len: int) -> str:
+    """Safely truncates long dossier strings to 1 single line inside split panels."""
+    val = str(value or "")
+    if len(val) <= max_len:
+        return val
+    if max_len <= 4:
+        return val[:max_len]
+    return val[: max_len - 2] + ".."
+
+
 def render_dossier_modal(flow: Optional[FlowEntry], width: int = 120) -> RenderableType:
-    """Renders the comprehensive Process Attribution Dossier overlay modal."""
+    """Renders the structured 3-section Enterprise Process Attribution Dossier view."""
     if not flow:
-        return Panel(Text("No session selected for attribution dossier", style="dim center"), border_style="#262b38")
+        return Panel(Text("No session selected for attribution dossier", style="dim center"), border_style="#334155")
 
-    body = Text()
-    body.append("Process Name   : ", style="#6b7280")
-    proc_style = "bold #fca5a5" if flow.is_threat and not flow.is_severed else ("bold #93c5fd" if flow.is_severed else "bold #e5e7eb")
-    body.append(f"{flow.process_name} (PID {flow.pid})", style=proc_style)
-    
-    state_disp = "SEVERED (TCB Deleted)" if flow.is_severed else ("ESTABLISHED (C2 Active)" if flow.is_threat else "ESTABLISHED (Baseline Flow)")
-    state_style = "bold #93c5fd" if flow.is_severed else ("bold #fca5a5" if flow.is_threat else "#6ee7b7")
-    body.append("          Socket State : ", style="#6b7280")
-    body.append(f"{state_disp}\n", style=state_style)
+    half_val_w = max(24, (width // 2) - 21)
 
-    body.append("Binary Path    : ", style="#6b7280")
-    body.append(f"{flow.binary_path}\n", style="bold #e5e7eb")
+    # Section 00: Top Summary Strip (Process, Threat Verdict, C2 Profile & Volume Window)
+    top_line1_l = Text()
+    proc_style = "bold #fca5a5" if flow.is_threat and not flow.is_severed else ("bold #93c5fd" if flow.is_severed else "bold #f8fafc")
+    top_line1_l.append(f"{flow.process_name} (PID {flow.pid})", style=proc_style)
+    top_line1_l.append("  ")
+    if flow.is_severed:
+        top_line1_l.append(" SEVERED ", style="bold #6ee7b7 on #1e293b")
+    elif flow.threat_score >= 0.90:
+        top_line1_l.append(f" {flow.threat_score * 100:.1f}% CRITICAL C2 ", style="bold white on #b91c1c")
+    elif flow.threat_score >= 0.75:
+        top_line1_l.append(f" {flow.threat_score * 100:.1f}% HIGH ", style="bold black on #d97706")
+    elif flow.threat_score >= 0.48:
+        top_line1_l.append(f" {flow.threat_score * 100:.1f}% EVAL ", style="bold black on #eab308")
+    else:
+        top_line1_l.append(f" {flow.threat_score * 100:.1f}% HEALTHY ", style="bold #10b981 on #1e293b")
 
-    cmd = flow.command_line or f"{flow.process_name} --c2 {flow.dst_ip}:{flow.dst_port}"
-    body.append("Command Line   : ", style="#6b7280")
-    body.append(f"{cmd}\n", style="#d1d5db")
+    if flow.c2_framework:
+        top_line1_l.append("  |  Profile: ", style="#94a3b8")
+        top_line1_l.append(flow.c2_framework, style="bold #f8fafc")
 
-    parent = flow.parent_process or "explorer.exe (PID 2110) [Interactive User Session]"
-    body.append("Parent Process : ", style="#6b7280")
-    body.append(f"{parent}\n", style="#d1d5db")
+    state_disp = "SEVERED (TCB Deleted)" if flow.is_severed else ("ESTABLISHED (C2 Active)" if flow.is_threat else "ESTABLISHED (Baseline)")
+    state_style = "bold #38bdf8" if flow.is_severed else ("bold #f87171" if flow.is_threat else "bold #10b981")
+    top_line1_r = Text()
+    top_line1_r.append("Socket State: ", style="#94a3b8")
+    top_line1_r.append(state_disp, style=state_style)
 
-    body.append("ProcessGuid    : ", style="#6b7280")
-    body.append(f"{flow.process_guid}\n", style="#d1d5db")
+    top_grid = Table.grid(expand=True)
+    top_grid.add_column(no_wrap=True)
+    top_grid.add_column(justify="right", no_wrap=True)
+    top_grid.add_row(top_line1_l, top_line1_r)
 
-    body.append("User Context   : ", style="#6b7280")
-    body.append(f"{flow.user_context}\n", style="#d1d5db")
+    vol_kb = flow.bytes_transferred / 1024.0
+    top_line2_l = Text()
+    top_line2_l.append("Duration: ", style="#94a3b8")
+    top_line2_l.append(flow.duration, style="bold #e2e8f0")
+    top_line2_l.append("  |  ", style="#475569")
+    top_line2_l.append("Traffic: ", style="#94a3b8")
+    top_line2_l.append(f"{flow.packets} pkts ({vol_kb:.1f} KB)", style="#cbd5e1")
+    top_line2_l.append("  |  ", style="#475569")
+    top_line2_l.append("Bursts: ", style="#94a3b8")
+    top_line2_l.append(flow.bursts, style="#e2e8f0")
 
-    body.append("Authenticode   : ", style="#6b7280")
-    sig_style = "#6ee7b7" if flow.is_signed else "bold #fca5a5"
-    sig_text = f"{flow.sig_info} (Verified CA Signature)" if flow.is_signed else f"{flow.sig_info} (WinVerifyTrust Fail)"
-    body.append(f"{sig_text}\n", style=sig_style)
+    top_line2_r = Text()
+    top_line2_r.append("Window: ", style="#94a3b8")
+    top_line2_r.append(f"{flow.first_seen} -> {flow.last_seen}", style="#cbd5e1")
+    top_grid.add_row(top_line2_l, top_line2_r)
 
-    body.append("SHA-256 Hash   : ", style="#6b7280")
-    body.append(f"{flow.sha256}\n", style="#9ca3af")
-
-    body.append("JA4 Client     : ", style="#6b7280")
-    body.append(f"{flow.ja4_fingerprint}\n", style="#93c5fd")
-
-    body.append("Active Socket  : ", style="#6b7280")
-    body.append(f"{flow.src_ip}:{flow.src_port} -> {flow.dst_ip}:{flow.dst_port} (TCP {flow.state})\n", style="#e5e7eb")
-
-    body.append("IAT MAD & IQR  : ", style="#6b7280")
-    body.append(f"MAD: {flow.iat_mad_ratio} │ IQR: {flow.iat_iqr_ratio} │ Skew: {flow.bowley_skew}\n", style="#fcd34d")
-
-    body.append("Conn / Burst   : ", style="#6b7280")
-    body.append(f"{flow.bursts} │ {flow.conn_per_burst}\n", style="#d1d5db")
-
-    body.append("MITRE ATT&CK   : ", style="#6b7280")
-    body.append(f"{flow.mitre_technique}\n", style="bold #e5e7eb")
-
-    body.append("SIEM & Audit   : ", style="#6b7280")
-    body.append(f"SQLite #{flow.flow_id} │ OCSF v1.1.0 NDJSON │ Windows Event ID 9001 / 9002\n", style="#d1d5db")
-
-    body.append("Containment    : ", style="#6b7280")
-    mit_text = "SEVERED (SetTcpEntry DELETE_TCB + WFP Outbound Block)" if flow.is_severed else "SetTcpEntry + netsh advfirewall Armed -> Press [K] to Contain"
-    mit_style = "bold #93c5fd" if flow.is_severed else ("bold #fca5a5" if flow.is_threat else "#6ee7b7")
-    body.append(f"{mit_text}\n\n", style=mit_style)
-
-    body.append("ACTIONS: ", style="#6b7280")
-    body.append("[ESC / I] Return to Cockpit    [K] Sever Connection    [C] Copy Full Path    [E] Export Dossier", style="#9ca3af")
-
-    return Panel(
-        body,
-        title=f"[bold #e5e7eb] Process Attribution Dossier : {flow.process_name} (PID {flow.pid}) [/]",
-        border_style="#323846",
-        style="on #0c0e13",
-        padding=(0, 2),
+    summary_panel = Panel(
+        top_grid,
+        title=f"[bold #f8fafc] Process Attribution Dossier : {flow.process_name} (PID {flow.pid}) [/]",
+        box=box.ROUNDED,
+        border_style="#991b1b" if (flow.is_threat and not flow.is_severed) else "#334155",
+        padding=(0, 1),
     )
+
+    # Section 01 (Left): Kernel Process & PE Lineage (7 single lines)
+    cmd = flow.command_line or f"{flow.process_name} --c2 {flow.dst_ip}:{flow.dst_port}"
+    parent = flow.parent_process or "explorer.exe (PID 2110) [Interactive User Session]"
+    sig_text = f"{flow.sig_info} (Verified CA)" if flow.is_signed else f"{flow.sig_info} (WinVerifyTrust Fail)"
+    sig_style = "bold #10b981" if flow.is_signed else "bold #f87171"
+    sha_disp = flow.sha256 if len(flow.sha256) <= half_val_w else f"{flow.sha256[:20]}..{flow.sha256[-12:]}"
+
+    c1 = Text()
+    c1.append("Binary Path  : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(flow.binary_path, half_val_w)}\n", style="bold #f8fafc")
+    c1.append("Command Line : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(cmd, half_val_w)}\n", style="#cbd5e1")
+    c1.append("Parent Proc  : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(parent, half_val_w)}\n", style="#cbd5e1")
+    c1.append("ProcessGuid  : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(flow.process_guid, half_val_w)}\n", style="#e2e8f0")
+    c1.append("User Token   : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(flow.user_context, half_val_w)}\n", style="#cbd5e1")
+    c1.append("Authenticode : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(sig_text, half_val_w)}\n", style=sig_style)
+    c1.append("SHA-256 Hash : ", style="#94a3b8")
+    c1.append(f"{_clip_dossier_value(sha_disp, half_val_w)}", style="#94a3b8")
+
+    p1 = Panel(
+        c1,
+        title="[bold #f8fafc] 01 / Kernel Process & Binary Attribution [/]",
+        box=box.ROUNDED,
+        border_style="#334155",
+        padding=(0, 1),
+    )
+
+    # Section 02 (Right): FlowFeaturesV1 Cadence & JA4 TLS Profile (7 single lines)
+    sni_disp = flow.sni if flow.sni else "Direct IP (No SNI Resolution)"
+    sni_style = "bold #f87171" if (not flow.sni and flow.is_threat) else "#e2e8f0"
+    sock_disp = f"{flow.src_ip}:{flow.src_port} -> {flow.dst_ip}:{flow.dst_port} ({flow.state})"
+    jit_clean = flow.jitter_str if str(flow.jitter_str).startswith(("+", "-", "±", "N")) else f"+/- {flow.jitter_str}"
+    int_disp = f"{flow.interval_str} ({jit_clean} | Jitter {flow.jitter_pct})"
+    iqr_skew_disp = f"{flow.iat_iqr_ratio} | Skew {flow.bowley_skew}"
+    cadence_disp = f"{flow.sparkline}  |  {flow.conn_per_burst}"
+
+    c2 = Text()
+    c2.append("5-Tuple Flow : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(sock_disp, half_val_w)}\n", style="bold #f8fafc")
+    c2.append("DNS / SNI    : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(sni_disp, half_val_w)}\n", style=sni_style)
+    c2.append("JA4 Client   : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(flow.ja4_fingerprint, half_val_w)}\n", style="#38bdf8")
+    c2.append("Interval     : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(int_disp, half_val_w)}\n", style="bold #f59e0b" if flow.is_threat else "#e2e8f0")
+    c2.append("MAD Ratio    : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(flow.iat_mad_ratio, half_val_w)}\n", style="bold #f87171" if flow.is_threat else "#94a3b8")
+    c2.append("IQR & Skew   : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(iqr_skew_disp, half_val_w)}\n", style="#cbd5e1")
+    c2.append("Cadence Bar  : ", style="#94a3b8")
+    c2.append(f"{_clip_dossier_value(cadence_disp, half_val_w)}", style="bold #ef4444" if flow.is_threat else "#cbd5e1")
+
+    p2 = Panel(
+        c2,
+        title="[bold #f8fafc] 02 / FlowFeaturesV1 Cadence & JA4 Profile [/]",
+        box=box.ROUNDED,
+        border_style="#334155",
+        padding=(0, 1),
+    )
+
+    mid_grid = Table.grid(expand=True, padding=(0, 1))
+    mid_grid.add_column(ratio=1)
+    mid_grid.add_column(ratio=1)
+    mid_grid.add_row(p1, p2)
+
+    # Section 03: MITRE ATT&CK, SIEM Audit & Surgical Containment (4 single lines)
+    mit_text = (
+        "SEVERED (SetTcpEntry DELETE_TCB + Windows Filtering Platform Outbound Block Enforced)"
+        if flow.is_severed
+        else (
+            "ARMED: SetTcpEntry(DELETE_TCB) + netsh advfirewall Outbound Block  ->  Press [K] to Contain"
+            if flow.is_threat
+            else "PERMITTED: Benign enterprise baseline (Monitoring Only)"
+        )
+    )
+    mit_style = "bold #38bdf8" if flow.is_severed else ("bold #f87171" if flow.is_threat else "bold #10b981")
+
+    c3 = Text()
+    c3.append("MITRE ATT&CK : ", style="#94a3b8")
+    c3.append(flow.mitre_technique, style="bold #f59e0b")
+    c3.append("    |    ", style="#475569")
+    c3.append("Signals : ", style="#94a3b8")
+    c3.append(f"{flow.detection_reasons}\n", style="#e2e8f0")
+
+    c3.append("SIEM & Audit : ", style="#94a3b8")
+    c3.append(f"SQLite WAL #{flow.flow_id}  |  OCSF v1.1.0 NDJSON (class_uid: 4001)  |  Windows Event Log (EID 9001 / 9002)\n", style="#cbd5e1")
+
+    c3.append("Containment  : ", style="#94a3b8")
+    c3.append(f"{mit_text}\n", style=mit_style)
+
+    c3.append("Actions      : ", style="#94a3b8")
+    c3.append("[ESC / I] Return to Cockpit    [K] Sever Connection    [C] Copy Full Path    [E] Export Dossier", style="bold #38bdf8")
+
+    p3 = Panel(
+        c3,
+        title="[bold #f8fafc] 03 / MITRE ATT&CK, SIEM Audit & Surgical Containment [/]",
+        box=box.ROUNDED,
+        border_style="#334155",
+        padding=(0, 1),
+    )
+
+    dossier_grid = Table.grid(expand=True)
+    dossier_grid.add_column()
+    dossier_grid.add_row(summary_panel)
+    dossier_grid.add_row(Text(""))
+    dossier_grid.add_row(mid_grid)
+    dossier_grid.add_row(Text(""))
+    dossier_grid.add_row(p3)
+
+    return dossier_grid
 
 
 def render_footer(state: CockpitState, width: int = 120) -> RenderableType:
-    """Renders the pristine UNIX hotkey guide strictly matching reference (flat bar, NO panel border)."""
+    """Renders the crisp UNIX hotkey bar (responsive width, zero overflow)."""
     grid = Table.grid(expand=True)
     grid.add_column()
-    
-    # 1 blank line for vertical breathing room matching reference
-    grid.add_row(Text(" " * width, style="on #090a0d"))
+
+    grid.add_row(Text(""))
 
     footer_grid = Table.grid(expand=True)
     footer_grid.add_column(no_wrap=True)
@@ -769,53 +876,76 @@ def render_footer(state: CockpitState, width: int = 120) -> RenderableType:
 
     fl = Text()
     if state.in_search_input:
-        fl.append(" ENTER ", style="bold #93c5fd on #1a1e26")
-        fl.append(" Apply Filter  ", style="#9ca3af")
-        fl.append(" ESC ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Cancel  ", style="#9ca3af")
-        fl.append(" BACKSPACE ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Delete Char", style="#9ca3af")
+        fl.append(" ENTER ", style="bold #38bdf8 on #1e293b")
+        fl.append(" Apply Filter  ", style="#94a3b8")
+        fl.append(" ESC ", style="bold #f8fafc on #1e293b")
+        fl.append(" Cancel  ", style="#94a3b8")
+        fl.append(" BACKSPACE ", style="bold #f8fafc on #1e293b")
+        fl.append(" Delete Char", style="#94a3b8")
     elif state.show_dossier:
-        fl.append(" ESC / I ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Close Dossier  ", style="#9ca3af")
-        fl.append(" K ", style="bold #fca5a5 on #1a1e26")
-        fl.append(" Sever  ", style="#9ca3af")
-        fl.append(" C ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Copy Path  ", style="#9ca3af")
-        fl.append(" E ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Export Dossier", style="#9ca3af")
-    else:
-        fl.append(" ↑/↓ ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Select  ", style="#9ca3af")
-        fl.append(" ENTER ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Detail  ", style="#9ca3af")
-        fl.append(" / ", style="bold #93c5fd on #1a1e26")
-        fl.append(" Search  ", style="#9ca3af")
-        fl.append(" S ", style="bold #fcd34d on #1a1e26")
-        fl.append(" Sort  ", style="#9ca3af")
-        fl.append(" K ", style="bold #fca5a5 on #1a1e26")
-        fl.append(" Kill  ", style="#9ca3af")
-        fl.append(" SPACE ", style="bold #e5e7eb on #1a1e26")
+        fl.append(" ESC / I ", style="bold #f8fafc on #1e293b")
+        fl.append(" Close Dossier  ", style="#94a3b8")
+        fl.append(" K ", style="bold #f87171 on #1e293b")
+        fl.append(" Sever  ", style="#94a3b8")
+        fl.append(" C ", style="bold #f8fafc on #1e293b")
+        fl.append(" Copy Path  ", style="#94a3b8")
+        fl.append(" E ", style="bold #f8fafc on #1e293b")
+        fl.append(" Export Dossier", style="#94a3b8")
+    elif width >= 126:
+        fl.append(" ↑/↓ ", style="bold #f8fafc on #1e293b")
+        fl.append(" Select  ", style="#94a3b8")
+        fl.append(" ENTER ", style="bold #f8fafc on #1e293b")
+        fl.append(" Detail  ", style="#94a3b8")
+        fl.append(" I ", style="bold #38bdf8 on #1e293b")
+        fl.append(" Dossier  ", style="#94a3b8")
+        fl.append(" / ", style="bold #38bdf8 on #1e293b")
+        fl.append(" Search  ", style="#94a3b8")
+        fl.append(" S ", style="bold #f59e0b on #1e293b")
+        fl.append(" Sort  ", style="#94a3b8")
+        fl.append(" K ", style="bold #f87171 on #1e293b")
+        fl.append(" Kill  ", style="#94a3b8")
+        fl.append(" SPACE ", style="bold #f8fafc on #1e293b")
         pause_label = " Pause  " if not state.is_paused else " Resume "
-        fl.append(pause_label, style="#9ca3af")
-        fl.append(" F ", style="bold #e5e7eb on #1a1e26")
+        fl.append(pause_label, style="#94a3b8")
+        fl.append(" F ", style="bold #f8fafc on #1e293b")
         filter_label = " Filter  " if not state.filter_threats_only else " All  "
-        fl.append(filter_label, style="#9ca3af")
-        fl.append(" E ", style="bold #e5e7eb on #1a1e26")
-        fl.append(" Export", style="#9ca3af")
+        fl.append(filter_label, style="#94a3b8")
+        fl.append(" E ", style="bold #f8fafc on #1e293b")
+        fl.append(" Export", style="#94a3b8")
+    else:
+        fl.append(" ↑/↓ ", style="bold #f8fafc on #1e293b")
+        fl.append(" Sel ", style="#94a3b8")
+        fl.append(" ENTER ", style="bold #f8fafc on #1e293b")
+        fl.append(" Det ", style="#94a3b8")
+        fl.append(" I ", style="bold #38bdf8 on #1e293b")
+        fl.append(" Doss ", style="#94a3b8")
+        fl.append(" / ", style="bold #38bdf8 on #1e293b")
+        fl.append(" Find ", style="#94a3b8")
+        fl.append(" S ", style="bold #f59e0b on #1e293b")
+        fl.append(" Sort ", style="#94a3b8")
+        fl.append(" K ", style="bold #f87171 on #1e293b")
+        fl.append(" Kill ", style="#94a3b8")
+        fl.append(" SPACE ", style="bold #f8fafc on #1e293b")
+        pause_label = " Pause " if not state.is_paused else " Run "
+        fl.append(pause_label, style="#94a3b8")
+        fl.append(" F ", style="bold #f8fafc on #1e293b")
+        filter_label = " Filt " if not state.filter_threats_only else " All "
+        fl.append(filter_label, style="#94a3b8")
+        fl.append(" E ", style="bold #f8fafc on #1e293b")
+        fl.append(" Exp", style="#94a3b8")
 
     fr = Text()
-    fr.append("│  ", style="#323846")
-    fr.append(" Q ", style="bold #e5e7eb on #1a1e26")
-    fr.append(" Quit", style="#9ca3af")
+    fr.append("│  ", style="#475569")
+    fr.append(" Q ", style="bold #f8fafc on #1e293b")
+    fr.append(" Quit", style="#94a3b8")
 
-    footer_grid.add_row(fl, fr, style="on #090a0d")
-    grid.add_row(footer_grid, style="on #090a0d")
+    footer_grid.add_row(fl, fr)
+    grid.add_row(footer_grid)
     return grid
 
 
 def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional[int] = None) -> Layout:
-    """Assembles the complete master layout strictly matching the reference design with adaptive breathing room."""
+    """Assembles the complete master layout strictly matching the enterprise design with adaptive breathing room."""
     root = Layout(name="root")
     term_height = height if (height and height >= 20) else 28
     header_size = 3
@@ -827,13 +957,23 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
         visible_flows = get_visible_flows(state)
         if visible_flows and 0 <= state.selected_index < len(visible_flows):
             selected_flow = visible_flows[state.selected_index]
-        
-        dossier_size = term_height - header_size - footer_size
-        root.split_column(
-            Layout(name="header", size=header_size),
-            Layout(name="dossier", size=dossier_size),
-            Layout(name="footer", size=footer_size),
-        )
+
+        dossier_size = max(21, term_height - header_size - footer_size)
+        has_top_gap = (term_height - header_size - footer_size) >= 23
+        if has_top_gap:
+            root.split_column(
+                Layout(name="header", size=header_size),
+                Layout(name="gap_d", size=1),
+                Layout(name="dossier", size=dossier_size - 1),
+                Layout(name="footer", size=footer_size),
+            )
+            root["gap_d"].update(Text(""))
+        else:
+            root.split_column(
+                Layout(name="header", size=header_size),
+                Layout(name="dossier", size=dossier_size),
+                Layout(name="footer", size=footer_size),
+            )
         root["header"].update(render_header(state, width=width))
         root["dossier"].update(render_dossier_modal(selected_flow, width=width))
         root["footer"].update(render_footer(state, width=width))
@@ -891,17 +1031,17 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
 
     root["header"].update(render_header(state, width=width))
     if has_gaps:
-        root["gap_1"].update(Text(" " * width, style="on #090a0d"))
+        root["gap_1"].update(Text(""))
 
     if pinned_alert:
         root["alert"].update(pinned_alert)
         if has_gaps:
-            root["gap_2"].update(Text(" " * width, style="on #090a0d"))
+            root["gap_2"].update(Text(""))
 
     root["main_table"].update(render_table(state, width=width, table_height=table_size))
 
     if has_gaps:
-        root["gap_3"].update(Text(" " * width, style="on #090a0d"))
+        root["gap_3"].update(Text(""))
 
     if state.drawer_expanded:
         selected_flow = None
@@ -910,7 +1050,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
             selected_flow = visible_flows[state.selected_index]
         root["drawer"].update(render_bottom_drawer(selected_flow, width=width))
         if has_gaps and surplus >= 4:
-            root["gap_4"].update(Text(" " * width, style="on #090a0d"))
+            root["gap_4"].update(Text(""))
 
     root["footer"].update(render_footer(state, width=width))
     return root
