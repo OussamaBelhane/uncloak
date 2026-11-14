@@ -71,6 +71,7 @@ uncloak_dossier_*.json
 *.cap
 !tests/fixtures/*.pcap
 !tests/fixtures/*.pcapng
+!samples/*.pcap
 data/raw/
 data/*.csv
 !data/samples/*.csv

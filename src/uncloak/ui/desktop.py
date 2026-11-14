@@ -73,6 +73,7 @@ class CockpitDataManager:
                     "command_line": f.command_line,
                     "parent_process": f.parent_process,
                     "sha256": f.sha256,
+                    "process_guid": getattr(f, "process_guid", f"{{8f3a91c2-4d11-672a-0100-00000000{f.pid:04x}}}"),
                     "ja4_fingerprint": f.ja4_fingerprint,
                     "heuristic_signals": f.heuristic_signals,
                     "detection_reasons": f.detection_reasons,
@@ -83,9 +84,13 @@ class CockpitDataManager:
                     "state": f.state,
                     "packets": f.packets,
                     "bytes_transferred": f.bytes_transferred,
-                    "first_seen": getattr(f, "first_seen", "2026-11-02 14:10:02 UTC"),
-                    "last_seen": getattr(f, "last_seen", "2026-11-02 14:26:45 UTC"),
+                    "first_seen": getattr(f, "first_seen", "2026-11-02 14:10:02"),
+                    "last_seen": getattr(f, "last_seen", "2026-11-02 14:26:45"),
                     "duration": getattr(f, "duration", "16m 43s"),
+                    "iat_mad_ratio": getattr(f, "iat_mad_ratio", "0.095 (Rigid Clockwork)" if f.is_threat else "0.684 (Organic Human)"),
+                    "iat_iqr_ratio": getattr(f, "iat_iqr_ratio", "0.142 (Low Dispersion)" if f.is_threat else "0.920 (Wide Variance)"),
+                    "bowley_skew": getattr(f, "bowley_skew", "+0.03 (Symmetric)" if f.is_threat else "+0.48 (Pareto Tail)"),
+                    "conn_per_burst": getattr(f, "conn_per_burst", "1.00 (Persistent Socket)" if f.is_threat else "1.40 (HTTP/2 Pool)"),
                 })
 
             top_threat = next((f for f in flows if f.is_threat and not f.is_severed), None)
@@ -377,28 +382,64 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>UNCLOAK :: C2 Threat Hunting & Host Attribution Engine</title>
+<title>Uncloak Enterprise | C2 Threat Hunting & Host Attribution Console</title>
 <style>
   :root {
-    --bg-base: #060913;
-    --bg-card: #0b1120;
-    --bg-hover: #131d33;
-    --border: #1e293b;
-    --border-bright: #334155;
-    --text-main: #f1f5f9;
-    --text-dim: #94a3b8;
-    --text-muted: #64748b;
-    --cyan: #38bdf8;
-    --cyan-glow: rgba(56, 189, 248, 0.25);
+    --bg-base: #090a0d;
+    --bg-panel: #101217;
+    --bg-card: #13161d;
+    --bg-hover: #1b1f29;
+    --border: #222631;
+    --border-subtle: #1b1e28;
+    --border-bright: #323846;
+    --text-main: #f3f4f6;
+    --text-dim: #9ca3af;
+    --text-muted: #6b7280;
+    --cyan: #e5e7eb;
+    --steel: #93c5fd;
+    --accent: #3b82f6;
+    --cyan-glow: transparent;
     --crimson: #ef4444;
     --crimson-dark: #dc2626;
-    --crimson-glow: rgba(239, 68, 68, 0.3);
+    --crimson-glow: transparent;
+    --orange: #f97316;
+    --orange-dark: #c2410c;
     --amber: #f59e0b;
     --green: #10b981;
-    --purple: #a855f7;
-    --font-mono: 'Consolas', 'Cascadia Code', 'SF Mono', monospace;
+    --indigo: #6366f1;
+    --purple: #a78bfa;
+    --font-sans: 'Inter', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Cascadia Code', 'Consolas', monospace;
 
-      /* RHYTHM SPARKLINE & JITTER TELEMETRY */
+    --ui-font-base: 12.5px;
+    --ui-header-h: 46px;
+    --ui-brand-size: 13.5px;
+    --ui-nav-size: 12px;
+    --ui-stat-size: 12px;
+    --ui-search-pad: 5px 10px;
+    --ui-search-size: 12px;
+    --ui-subnet-title-size: 11px;
+    --ui-grid-min: 235px;
+    --ui-card-pad: 7px 10px;
+    --ui-card-name-size: 12px;
+    --ui-pill-size: 10px;
+    --ui-pill-pad: 2px 6px;
+    --ui-meta-size: 11.5px;
+    --ui-threat-tag-size: 10.5px;
+    --ui-table-header-size: 10.5px;
+    --ui-table-header-pad: 7px 12px;
+    --ui-table-cell-size: 12px;
+    --ui-table-cell-pad: 6px 12px;
+    --ui-drawer-title-size: 11px;
+    --ui-drawer-pad: 10px 14px;
+    --ui-card-kv-size: 11.5px;
+    --ui-action-btn-pad: 5px 10px;
+    --ui-action-btn-size: 11.5px;
+    --ui-footer-pad: 5px 18px;
+    --ui-footer-size: 11px;
+  }
+
+  /* PRECISION CADENCE TELEMETRY CELLS */
   .pulse-cell {
     display: inline-flex;
     align-items: center;
@@ -409,239 +450,149 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     display: inline-flex;
     align-items: center;
     justify-content: space-evenly;
-    width: 66px;
-    height: 18px;
-    background: rgba(11, 17, 32, 0.95);
-    border: 1px solid #1e293b;
+    width: 54px;
+    height: 16px;
+    background: #0c0e13;
+    border: 1px solid #222631;
     border-radius: 3px;
-    padding: 0 4px;
+    padding: 0 3px;
     box-sizing: border-box;
     position: relative;
     overflow: hidden;
   }
   .rhythm-track.threat-track {
-    border-color: rgba(239, 68, 68, 0.45);
-    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.38);
+    background: rgba(239, 68, 68, 0.07);
   }
   .rhythm-tick {
     width: 2px;
-    height: 12px;
+    height: 9px;
     border-radius: 1px;
   }
   .rhythm-tick.c2-tick {
-    background: #f87171;
-    box-shadow: 0 0 4px rgba(248, 113, 113, 0.8);
+    background: #ef4444;
   }
   .rhythm-tick.benign-tick {
-    background: var(--green);
-    box-shadow: 0 0 3px rgba(16, 185, 129, 0.6);
+    background: #6b7280;
   }
   .organic-wave {
     display: inline-flex;
     align-items: flex-end;
-    gap: 3px;
-    height: 12px;
+    gap: 2.5px;
+    height: 10px;
   }
   .organic-bar {
     width: 2px;
-    background: #38bdf8;
-    opacity: 0.6;
+    background: #525866;
     border-radius: 1px;
   }
   .jitter-pill {
-    font-size: 8.5px;
-    font-weight: 700;
-    padding: 2px 6px;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 1px 6px;
     border-radius: 3px;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
     white-space: nowrap;
-    text-transform: uppercase;
     font-family: var(--font-mono);
   }
   .jitter-pill.rigid {
-    background: rgba(239, 68, 68, 0.15);
+    background: rgba(239, 68, 68, 0.1);
     color: #fca5a5;
-    border: 1px solid rgba(239, 68, 68, 0.4);
+    border: 1px solid rgba(239, 68, 68, 0.28);
   }
   .jitter-pill.organic {
-    background: rgba(16, 185, 129, 0.1);
-    color: #6ee7b7;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid #222631;
   }
   .jitter-pill.clean {
-    background: rgba(56, 189, 248, 0.1);
-    color: #7dd3fc;
-    border: 1px solid rgba(56, 189, 248, 0.3);
+    background: #14171f;
+    color: var(--text-dim);
+    border: 1px solid #262a36;
   }
 
-  /* RESPONSIVE SCALING ENGINE (Default: 110% Comfortable Desktop View) */
-    --ui-font-base: 12.2px;
-    --ui-header-pad: 10px 18px;
-    --ui-brand-size: 14.5px;
-    --ui-nav-pad: 6px 14px;
-    --ui-nav-size: 11px;
-    --ui-stat-pad: 4px 10px;
-    --ui-stat-size: 11px;
-    --ui-search-pad: 7px 12px;
-    --ui-search-size: 12px;
-    --ui-subnet-title-size: 11.5px;
-    --ui-grid-min: 310px;
-    --ui-card-pad: 12px 14px;
-    --ui-card-name-size: 13.5px;
-    --ui-pill-size: 10px;
-    --ui-pill-pad: 3px 7px;
-    --ui-meta-size: 11px;
-    --ui-threat-tag-size: 11px;
-    --ui-table-header-size: 11px;
-    --ui-table-header-pad: 8px 12px;
-    --ui-table-cell-size: 12px;
-    --ui-table-cell-pad: 8px 12px;
-    --ui-drawer-title-size: 11.5px;
-    --ui-drawer-pad: 14px;
-    --ui-card-kv-size: 12px;
-    --ui-action-btn-pad: 5px 12px;
-    --ui-action-btn-size: 11px;
-    --ui-footer-pad: 8px 18px;
-    --ui-footer-size: 11px;
-  }
-
-  /* COMPACT SCREEN / LAPTOP RESPONSIVE ADAPTATION (Automatic 100% Sizing for screen width <= 1366px or height <= 820px) */
-  @media (max-width: 1366px), (max-height: 820px) {
-    :root {
-      --ui-font-base: 11px;
-      --ui-header-pad: 8px 16px;
-      --ui-brand-size: 13px;
-      --ui-nav-pad: 5px 12px;
-      --ui-nav-size: 10px;
-      --ui-stat-pad: 3px 8px;
-      --ui-stat-size: 10px;
-      --ui-search-pad: 5px 10px;
-      --ui-search-size: 11px;
-      --ui-subnet-title-size: 10px;
-      --ui-grid-min: 280px;
-      --ui-card-pad: 10px 12px;
-      --ui-card-name-size: 12px;
-      --ui-pill-size: 9px;
-      --ui-pill-pad: 2px 6px;
-      --ui-meta-size: 10px;
-      --ui-threat-tag-size: 10px;
-      --ui-table-header-size: 10px;
-      --ui-table-header-pad: 6px 10px;
-      --ui-table-cell-size: 11px;
-      --ui-table-cell-pad: 6px 10px;
-      --ui-drawer-title-size: 10px;
-      --ui-drawer-pad: 12px;
-      --ui-card-kv-size: 11px;
-      --ui-action-btn-pad: 4px 10px;
-      --ui-action-btn-size: 10px;
-      --ui-footer-pad: 6px 16px;
-      --ui-footer-size: 10px;
-    }
-  }
-
-  /* RESPONSIVE SCALING ENGINE:
-     - Desktop Monitors (>= 1440px wide & >= 850px tall): 110% Zoom (matches 110% Image 2)
-     - Laptops & Compact Displays (< 1440px or < 850px): 100% Scale (matches 100% Image 1)
-  */
-  @media (min-width: 1440px) and (min-height: 850px) {
-    body {
-      zoom: 1.1;
-    }
-  }
-
-  @media (max-width: 1439px), (max-height: 849px) {
-    body {
-      zoom: 1.0;
-    }
-  }
-
+  /* NATIVE 1:1 DENSITY MODES */
   body.force-compact {
-    zoom: 1.0 !important;
-    --ui-font-base: 11px !important;
-    --ui-header-pad: 8px 16px !important;
+    --ui-font-base: 11.5px !important;
+    --ui-header-h: 42px !important;
     --ui-brand-size: 13px !important;
-    --ui-nav-pad: 5px 12px !important;
-    --ui-nav-size: 10px !important;
-    --ui-stat-pad: 3px 8px !important;
-    --ui-stat-size: 10px !important;
-    --ui-search-pad: 5px 10px !important;
-    --ui-search-size: 11px !important;
-    --ui-subnet-title-size: 10px !important;
-    --ui-grid-min: 280px !important;
-    --ui-card-pad: 10px 12px !important;
+    --ui-nav-size: 11.5px !important;
+    --ui-stat-size: 11px !important;
+    --ui-search-pad: 4px 9px !important;
+    --ui-search-size: 11.5px !important;
+    --ui-subnet-title-size: 10.5px !important;
+    --ui-grid-min: 245px !important;
+    --ui-card-pad: 7px 10px !important;
     --ui-card-name-size: 12px !important;
-    --ui-pill-size: 9px !important;
-    --ui-pill-pad: 2px 6px !important;
-    --ui-meta-size: 10px !important;
+    --ui-pill-size: 9.5px !important;
+    --ui-pill-pad: 1.5px 5px !important;
+    --ui-meta-size: 11px !important;
     --ui-threat-tag-size: 10px !important;
     --ui-table-header-size: 10px !important;
     --ui-table-header-pad: 6px 10px !important;
-    --ui-table-cell-size: 11px !important;
-    --ui-table-cell-pad: 6px 10px !important;
-    --ui-drawer-title-size: 10px !important;
-    --ui-drawer-pad: 12px !important;
+    --ui-table-cell-size: 11.5px !important;
+    --ui-table-cell-pad: 5px 10px !important;
+    --ui-drawer-title-size: 10.5px !important;
+    --ui-drawer-pad: 9px 12px !important;
     --ui-card-kv-size: 11px !important;
-    --ui-action-btn-pad: 4px 10px !important;
-    --ui-action-btn-size: 10px !important;
-    --ui-footer-pad: 6px 16px !important;
-    --ui-footer-size: 10px !important;
+    --ui-action-btn-pad: 4px 9px !important;
+    --ui-action-btn-size: 11px !important;
+    --ui-footer-pad: 4px 14px !important;
+    --ui-footer-size: 10.5px !important;
   }
 
   body.force-large {
-    zoom: 1.1 !important;
-    --ui-font-base: 12.2px !important;
-    --ui-header-pad: 10px 18px !important;
-    --ui-brand-size: 14.5px !important;
-    --ui-nav-pad: 6px 14px !important;
-    --ui-nav-size: 11px !important;
-    --ui-stat-pad: 4px 10px !important;
-    --ui-stat-size: 11px !important;
-    --ui-search-pad: 7px 12px !important;
+    --ui-font-base: 12.5px !important;
+    --ui-header-h: 46px !important;
+    --ui-brand-size: 13.5px !important;
+    --ui-nav-size: 12px !important;
+    --ui-stat-size: 12px !important;
+    --ui-search-pad: 5px 10px !important;
     --ui-search-size: 12px !important;
-    --ui-subnet-title-size: 11.5px !important;
-    --ui-grid-min: 310px !important;
-    --ui-card-pad: 12px 14px !important;
-    --ui-card-name-size: 13.5px !important;
+    --ui-subnet-title-size: 11px !important;
+    --ui-grid-min: 235px !important;
+    --ui-card-pad: 6px 10px !important;
+    --ui-card-name-size: 12px !important;
     --ui-pill-size: 10px !important;
-    --ui-pill-pad: 3px 7px !important;
-    --ui-meta-size: 11px !important;
-    --ui-threat-tag-size: 11px !important;
-    --ui-table-header-size: 11px !important;
-    --ui-table-header-pad: 8px 12px !important;
+    --ui-pill-pad: 2px 6px !important;
+    --ui-meta-size: 11.5px !important;
+    --ui-threat-tag-size: 10.5px !important;
+    --ui-table-header-size: 10.5px !important;
+    --ui-table-header-pad: 7px 12px !important;
     --ui-table-cell-size: 12px !important;
-    --ui-table-cell-pad: 8px 12px !important;
-    --ui-drawer-title-size: 11.5px !important;
-    --ui-drawer-pad: 14px !important;
-    --ui-card-kv-size: 12px !important;
-    --ui-action-btn-pad: 5px 12px !important;
-    --ui-action-btn-size: 11px !important;
-    --ui-footer-pad: 8px 18px !important;
+    --ui-table-cell-pad: 6px 12px !important;
+    --ui-drawer-title-size: 11px !important;
+    --ui-drawer-pad: 10px 14px !important;
+    --ui-card-kv-size: 11.5px !important;
+    --ui-action-btn-pad: 5px 10px !important;
+    --ui-action-btn-size: 11.5px !important;
+    --ui-footer-pad: 5px 18px !important;
     --ui-footer-size: 11px !important;
   }
 
-  /* Enterprise Layout Switcher */
+  /* SEGMENTED FILTER CONTROLS */
   .view-switch-btn {
     background: transparent;
     border: 1px solid transparent;
     color: var(--text-dim);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 700;
-    padding: 4px 12px;
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 10px;
     border-radius: 4px;
     cursor: pointer;
-    letter-spacing: 0.5px;
-    transition: all 0.15s ease;
+    white-space: nowrap;
+    transition: background-color 0.12s ease, color 0.12s ease;
   }
   .view-switch-btn:hover {
-    color: var(--cyan);
-    background: rgba(56, 189, 248, 0.08);
+    color: var(--text-main);
+    background: var(--bg-hover);
   }
   .view-switch-btn.active {
-    background: #1e293b;
-    border-color: var(--cyan);
-    color: var(--cyan);
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    background: #1f2430;
+    border-color: #323846;
+    color: var(--text-main);
+    font-weight: 600;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -651,40 +602,47 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     overflow: hidden !important;
     background-color: var(--bg-base);
     color: var(--text-main);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: var(--ui-font-base);
     line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
     user-select: none;
     display: flex;
     flex-direction: column;
   }
+  .mono-num, .mono-val, code, pre {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
 
-  /* SLEEK CYBER CUSTOM SCROLLBAR (ELIMINATES UGLY WHITE OS SCROLLBARS) */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: #020617;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #1e293b;
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: #161922;
+    border: 1px solid #282d3a;
     border-radius: 3px;
-    border: 1px solid rgba(56, 189, 248, 0.25);
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--cyan);
-  }
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: #1e293b #020617;
+    padding: 0 4px;
+    height: 16px;
+    line-height: 1;
   }
 
-  /* TOP ENTERPRISE HEADER */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg-base); }
+  ::-webkit-scrollbar-thumb { background: #262a36; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3b4254; }
+  * { scrollbar-width: thin; scrollbar-color: #262a36 #090a0d; }
+
+  /* TOP APPLICATION BAR */
   header {
-    background: #090e1c;
+    height: var(--ui-header-h);
+    background: #0c0e12;
     border-bottom: 1px solid var(--border);
-    padding: var(--ui-header-pad);
+    padding: 0 18px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -695,49 +653,84 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
   .brand-group {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
+    height: 100%;
+    min-width: 0;
   }
 
   .brand-logo {
     font-size: var(--ui-brand-size);
-    font-weight: 800;
-    color: var(--cyan);
-    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: var(--text-main);
+    letter-spacing: 0.04em;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .header-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
     flex-shrink: 0;
   }
 
   .nav-tabs {
     display: flex;
+    align-items: stretch;
     gap: 4px;
-    background: rgba(2, 6, 23, 0.6);
-    padding: 3px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
+    height: 100%;
+    background: transparent;
+    border: none;
+    padding: 0;
   }
 
   .nav-tab-btn {
-    background: none;
+    background: transparent;
     border: none;
+    border-bottom: 2px solid transparent;
     color: var(--text-dim);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: var(--ui-nav-size);
-    font-weight: 700;
-    padding: var(--ui-nav-pad);
-    border-radius: 4px;
+    font-weight: 500;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: color 0.12s ease, border-color 0.12s ease;
   }
 
-  .nav-tab-btn:hover { color: white; background: var(--bg-hover); }
+  .nav-tab-btn:hover { color: var(--text-main); }
   .nav-tab-btn.active {
-    color: white;
-    background: #1e293b;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
-    outline: 1px solid var(--border-bright);
+    color: #ffffff;
+    font-weight: 600;
+    border-bottom-color: #f3f4f6;
+  }
+  .nav-tab-btn.active kbd {
+    color: #e5e7eb;
+    border-color: #3a4052;
+    background: #1f2430;
+  }
+
+  /* SUBTAB UNDERLINE VARIANT */
+  .sub-nav-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sub-nav-tabs .nav-tab-btn {
+    height: 32px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    margin-bottom: -1px;
+  }
+  .sub-nav-tabs .nav-tab-btn.active {
+    border-bottom-color: #e5e7eb;
   }
 
   .fleet-stats-strip {
@@ -745,283 +738,377 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     align-items: center;
     gap: 10px;
     font-size: var(--ui-stat-size);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
-  .stat-badge {
-    background: #0b1120;
-    border: 1px solid var(--border);
-    padding: var(--ui-stat-pad);
-    border-radius: 4px;
-    color: var(--text-dim);
-    display: flex;
+  .stat-metric {
+    display: inline-flex;
     align-items: center;
     gap: 6px;
+    color: var(--text-dim);
+    font-weight: 500;
+    padding: 2px 4px;
+    white-space: nowrap;
   }
-
-  .stat-badge strong { color: white; }
-  .stat-badge.critical { border-color: rgba(239, 68, 68, 0.5); color: #fca5a5; }
-  .stat-badge.critical strong { color: #f87171; }
+  .stat-metric strong {
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-metric.critical {
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+  }
+  .stat-metric.critical strong { color: #f87171; }
+  .stat-metric.critical:hover { background: rgba(239, 68, 68, 0.14); }
 
   .live-dot {
     width: 6px; height: 6px;
     border-radius: 50%;
     background: var(--green);
-    box-shadow: 0 0 6px var(--green);
     display: inline-block;
+    flex-shrink: 0;
   }
-  .live-dot.pulsing {
-    background: var(--crimson);
-    box-shadow: 0 0 8px var(--crimson);
-    animation: pulse 1.2s infinite;
-  }
+  .live-dot.pulsing { background: var(--crimson); }
+  .live-dot.high-dot { background: var(--amber); }
+  .live-dot.eval-dot { background: #9ca3af; }
 
-  @keyframes pulse {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.3); opacity: 0.6; }
-    100% { transform: scale(1); opacity: 1; }
-  }
-
-  /* MAIN CONTENT WRAPPER (NO DOUBLE SCROLLBAR) */
+  /* MAIN CONTENT WRAPPER */
   .workspace-container {
     flex: 1;
     min-height: 0;
     overflow: hidden !important;
-    padding: 10px 16px;
+    padding: 10px 18px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 9px;
   }
 
-  /* VIEW PANELS */
   .view-panel {
     display: none;
     flex-direction: column;
-    gap: 10px;
+    gap: 9px;
     flex: 1;
     min-height: 0;
     height: 100%;
     overflow: hidden;
   }
-  .view-panel.active {
-    display: flex;
-  }
+  .view-panel.active { display: flex; }
 
   .fleet-filter-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    background: #090e1c;
+    gap: 10px;
+    background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 8px 12px;
+    padding: 6px 12px;
+    flex-shrink: 0;
+  }
+
+  /* INCIDENT PRIORITY QUEUE RIBBON */
+  .priority-ribbon {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    background: #121116;
+    border: 1px solid #26222c;
+    border-left: 3px solid #ef4444;
+    border-radius: 5px;
+    padding: 5px 10px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .priority-ribbon-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #f87171;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+  .priority-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #171820;
+    border: 1px solid #2a2833;
+    border-radius: 4px;
+    padding: 3px 9px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    justify-content: space-between;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+  .priority-chip:hover {
+    border-color: #4b5563;
+    background: #1d202b;
   }
 
   .search-box {
-    background: #020617;
+    background: #0c0e13;
     border: 1px solid var(--border);
     border-radius: 4px;
-    color: white;
-    font-family: var(--font-mono);
+    color: var(--text-main);
+    font-family: var(--font-sans);
     font-size: var(--ui-search-size);
     padding: var(--ui-search-pad);
-    width: 340px;
+    width: 260px;
   }
-  .search-box:focus { outline: 1px solid var(--cyan); }
+  .search-box:focus { outline: none; border-color: #4b5563; }
 
   .subnet-group {
-    background: #090e1c;
+    background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 12px;
+    padding: 8px 11px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
   }
 
   .subnet-title {
     font-size: var(--ui-subnet-title-size);
-    font-weight: 700;
-    color: var(--cyan);
-    letter-spacing: 0.08em;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
   }
 
   .host-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--ui-grid-min), 1fr));
-    gap: 10px;
+    gap: 7px;
   }
 
   .host-card {
-    background: #040711;
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
     padding: var(--ui-card-pad);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
   }
 
   .host-card:hover {
-    background: #0c1222;
-    border-color: var(--cyan);
-    transform: translateY(-1px);
+    background: var(--bg-hover);
+    border-color: var(--border-bright);
   }
 
   .host-card.critical {
-    border-color: rgba(239, 68, 68, 0.6);
-    background: linear-gradient(180deg, #160808 0%, #080303 100%);
-    box-shadow: 0 0 15px rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.35);
+    border-left: 3px solid #ef4444;
+    background: #171216;
+  }
+
+  .host-card.high {
+    border-color: rgba(245, 158, 11, 0.3);
+    border-left: 3px solid #f59e0b;
+    background: #161412;
+  }
+
+  .host-card.eval {
+    border-color: #282c38;
+    border-left: 2px solid #eab308;
+    background: var(--bg-card);
   }
 
   .host-card.muted {
-    border-color: #f59e0b;
-    background: #090b14;
-    opacity: 0.82;
+    border-color: #242834;
+    background: #111318;
+    opacity: 0.72;
   }
 
-  .live-dot.muted {
-    background: #94a3b8;
-    box-shadow: none;
-  }
-
-  .host-pill.muted {
-    background: #334155;
-    color: #fde68a;
-    border: 1px solid #f59e0b;
-  }
+  .live-dot.muted { background: #6b7280; }
 
   .staleness-banner {
-    background: #1c1507;
-    border: 1px solid #f59e0b;
-    border-radius: 6px;
-    padding: 8px 12px;
-    color: #fde68a;
-    font-size: 11px;
-    font-weight: 700;
+    background: #191610;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 5px;
+    padding: 7px 12px;
+    color: #fcd34d;
+    font-size: 11.5px;
+    font-weight: 500;
     display: none;
     align-items: center;
     gap: 8px;
-    margin-bottom: 10px;
   }
 
   .host-card-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
-  }
-
-  .host-name {
-    font-weight: 700;
-    font-size: var(--ui-card-name-size);
-    color: white;
-    display: flex;
-    align-items: center;
     gap: 6px;
   }
 
-  .host-pill {
-    font-size: var(--ui-pill-size);
-    font-weight: 700;
-    padding: var(--ui-pill-pad);
-    border-radius: 3px;
-    text-transform: uppercase;
+  .host-name {
+    font-weight: 600;
+    font-size: var(--ui-card-name-size);
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
   }
 
-  .host-pill.crit { background: var(--crimson-dark); color: white; }
-  .host-pill.high { background: var(--amber); color: black; }
-  .host-pill.eval { background: #3b82f6; color: white; }
-  .host-pill.safe { background: #064e3b; color: #a7f3d0; }
+  .host-pill {
+    font-family: var(--font-mono);
+    font-size: var(--ui-pill-size);
+    font-weight: 600;
+    padding: var(--ui-pill-pad);
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .host-pill.crit { background: rgba(239, 68, 68, 0.14); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
+  .host-pill.high { background: rgba(245, 158, 11, 0.14); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.35); }
+  .host-pill.eval { background: rgba(234, 179, 8, 0.1); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.28); }
+  .host-pill.safe { background: transparent; color: var(--text-muted); border: 1px solid #222631; }
+  .host-pill.muted { background: #181b22; color: #9ca3af; border: 1px solid #2b303c; }
+  .host-pill.arch { background: #151821; color: var(--text-dim); border: 1px solid #262b38; }
+  .host-pill.lolbin { background: rgba(245, 158, 11, 0.12); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.32); }
+
+  .host-quiet-score {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
 
   .host-meta {
     font-size: var(--ui-meta-size);
     color: var(--text-dim);
     display: flex;
     justify-content: space-between;
+    align-items: center;
   }
+  .host-ip { font-family: var(--font-mono); color: var(--text-dim); font-size: 11.5px; }
+  .host-os { color: var(--text-muted); font-size: 11px; }
 
   .host-threat-c2 {
+    font-family: var(--font-mono);
     font-size: var(--ui-threat-tag-size);
+    font-weight: 600;
     color: #fca5a5;
-    background: rgba(220, 38, 38, 0.2);
-    padding: 2px 6px;
+    background: rgba(239, 68, 68, 0.08);
+    padding: 3px 7px;
     border-radius: 3px;
-    border: 1px solid rgba(239, 68, 68, 0.4);
-    display: inline-block;
+    border: 1px solid rgba(239, 68, 68, 0.22);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-top: 2px;
   }
+  .host-threat-c2.high-c2 {
+    color: #fcd34d;
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.25);
+  }
 
-  /* VIEW 2: CAMPAIGN CORRELATION (STREAMLINED MASTER-DETAIL) */
+  /* VIEW 2: CAMPAIGN CORRELATION */
+  .campaign-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .campaign-kpi-cell {
+    padding: 9px 14px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+  .campaign-kpi-cell:last-child { border-right: none; }
+
   .campaign-split-view {
     display: grid;
-    grid-template-columns: 35% 65%;
+    grid-template-columns: 33% 67%;
     gap: 12px;
-    height: calc(100vh - 195px);
-    min-height: 480px;
-    max-height: 740px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .campaign-card {
-    background: #090e1c;
-    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
     border-left: 3px solid #ef4444;
-    border-radius: 6px;
-    padding: 10px 12px;
+    border-radius: 5px;
+    padding: 11px 13px;
     display: flex;
     flex-direction: column;
     gap: 8px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 0.12s ease, border-color 0.12s ease;
   }
-
   .campaign-card:hover:not(.selected) {
-    background: #0f172a;
-    border-color: rgba(56, 189, 248, 0.6);
-    transform: translateX(2px);
+    background: var(--bg-hover);
+    border-color: var(--border-bright);
   }
-
   .campaign-card.selected {
-    background: linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, #090e1c 100%) !important;
-    border: 1px solid var(--cyan) !important;
-    border-left: 4px solid var(--cyan) !important;
-    box-shadow: 0 0 16px rgba(56, 189, 248, 0.22) !important;
+    background: #141720 !important;
+    border: 1px solid #3f4658 !important;
+    border-left: 3px solid #f3f4f6 !important;
   }
 
   .campaign-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--border-subtle);
     padding-bottom: 6px;
   }
 
   .campaign-title {
-    font-size: 11.5px;
-    font-weight: 800;
-    color: #f87171;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-main);
     display: flex;
     align-items: center;
-    gap: 6px;
-    letter-spacing: 0.3px;
+    gap: 7px;
   }
 
   .campaign-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 6px 10px;
-    background: #040711;
+    background: #0c0e13;
     padding: 8px 10px;
     border-radius: 4px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-subtle);
   }
 
-  .campaign-kv span { display: block; font-size: 8.5px; color: var(--text-dim); letter-spacing: 0.3px; }
-  .campaign-kv strong { font-size: 10px; color: white; word-break: break-all; }
+  .campaign-kv span { display: block; font-size: 9.5px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .campaign-kv strong { font-size: 11.5px; color: var(--text-main); word-break: break-all; font-family: var(--font-mono); font-weight: 500; }
 
   .affected-hosts-row {
     display: flex;
@@ -1031,85 +1118,128 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
   }
 
   .affected-host-chip {
-    background: #1e1b4b;
-    border: 1px solid #4338ca;
-    color: #c7d2fe;
-    padding: 2px 6px;
+    background: #171a23;
+    border: 1px solid #2b303e;
+    color: var(--text-main);
+    padding: 2px 7px;
     border-radius: 3px;
-    font-weight: 700;
-    font-size: 9px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 10.5px;
   }
+  .affected-host-chip:hover { border-color: #4b5563; background: #1e222e; }
 
-  /* SVG Attack Graph Animations */
-  @keyframes packetFlow {
-    from { stroke-dashoffset: 24; }
-    to { stroke-dashoffset: 0; }
+  /* KILL-CHAIN TECHNICAL NODE CARDS */
+  .killchain-canvas {
+    background: #0c0e13;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 1fr 124px 1fr 124px 1fr;
+    align-items: center;
+    gap: 6px;
   }
-  .attack-pulse-red {
-    stroke-dasharray: 6 3;
-    animation: packetFlow 1s linear infinite;
+  .kc-node {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 9px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
   }
-  .attack-pulse-amber {
-    stroke-dasharray: 5 3;
-    animation: packetFlow 1.2s linear infinite;
+  .kc-node.kc-clickable { cursor: pointer; }
+  .kc-node.kc-clickable:hover { border-color: #4b5563; background: var(--bg-hover); }
+  .kc-node.kc-red { border-top: 2px solid #ef4444; }
+  .kc-node.kc-amber { border-top: 2px solid #f59e0b; }
+  .kc-node.kc-steel { border-top: 2px solid #60a5fa; }
+  .kc-node.kc-green { border-top: 2px solid #10b981; }
+  .kc-tag {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
-  .attack-pulse-purple {
-    stroke-dasharray: 6 3;
-    animation: packetFlow 1s linear infinite;
+  .kc-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
   }
-  @keyframes pulseGlowRed {
-    0%, 100% { filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.5)); }
-    50% { filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.85)); }
+  .kc-meta {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
   }
-  @keyframes pulseGlowAmber {
-    0%, 100% { filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.5)); }
-    50% { filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.85)); }
+  .kc-edge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
   }
-  @keyframes pulseGlowCyan {
-    0%, 100% { filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.5)); }
-    50% { filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.85)); }
+  .kc-edge-pill {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--text-dim);
+    background: #14171f;
+    border: 1px solid #262b38;
+    border-radius: 3px;
+    padding: 1px 6px;
+    white-space: nowrap;
   }
-  .pulse-node-red { animation: pulseGlowRed 2s ease-in-out infinite; }
-  .pulse-node-amber { animation: pulseGlowAmber 2s ease-in-out infinite; }
-  .pulse-node-cyan { animation: pulseGlowCyan 2s ease-in-out infinite; }
 
   /* VIEW 3: HOST DRILL-DOWN */
   .drilldown-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #090e1c;
+    background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 8px 12px;
+    padding: 6px 12px;
+    flex-shrink: 0;
   }
 
   .incident-banner {
-    background: linear-gradient(90deg, rgba(30, 8, 8, 0.95), rgba(45, 12, 12, 0.85));
-    border: 1px solid var(--crimson-dark);
-    border-radius: 8px;
-    padding: 8px 14px;
+    background: #151115;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-left: 3px solid #ef4444;
+    border-radius: 5px;
+    padding: 7px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-shrink: 0;
   }
 
   .incident-tag {
-    background: var(--crimson-dark);
-    color: white;
-    font-weight: 700;
+    background: rgba(239, 68, 68, 0.16);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    color: #fca5a5;
+    font-family: var(--font-mono);
+    font-weight: 600;
     font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 4px;
+    padding: 2px 7px;
+    border-radius: 3px;
     text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
   }
 
   .table-wrapper {
-    background: #090e1c;
+    background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow-x: auto;
+    overflow-y: auto;
   }
 
   table {
@@ -1122,104 +1252,153 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     position: sticky;
     top: 0;
     z-index: 10;
-    background: #040711;
-    color: var(--text-dim);
+    background: #14171f;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
     font-size: var(--ui-table-header-size);
-    font-weight: 700;
+    font-weight: 600;
+    letter-spacing: 0.04em;
     padding: var(--ui-table-header-pad);
     border-bottom: 1px solid var(--border);
     cursor: pointer;
+    white-space: nowrap;
   }
 
   td {
     padding: var(--ui-table-cell-pad);
-    border-bottom: 1px solid rgba(30, 41, 59, 0.4);
+    border-bottom: 1px solid var(--border-subtle);
     font-size: var(--ui-table-cell-size);
+    font-family: var(--font-mono);
   }
 
-  tbody tr.row-threat { background: #160808; }
-  tbody tr.selected { background: #1e293b !important; outline: 1px solid var(--cyan); }
+  tbody tr:hover { background: #161922; }
+  tbody tr.row-threat {
+    background: rgba(239, 68, 68, 0.045);
+    border-left: 2px solid rgba(239, 68, 68, 0.55);
+  }
+  tbody tr.selected {
+    background: #181c26 !important;
+    border-left: 3px solid #f3f4f6 !important;
+  }
+  tbody tr.row-threat.selected {
+    background: rgba(239, 68, 68, 0.11) !important;
+    border-left: 3px solid #ef4444 !important;
+  }
 
-  /* TRI-PANE DRAWER */
+  /* UNIFIED 3-COLUMN TECHNICAL INSPECTOR SHEET */
   .drawer-container {
-    background: #090e1c;
+    background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: var(--ui-drawer-pad);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .drawer-topbar {
+    background: #14171f;
+    border-bottom: 1px solid var(--border);
+    padding: 7px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
 
   .drawer-cards {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    gap: 0;
+    align-items: stretch;
   }
 
   .forensic-card {
-    background: #040711;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     gap: 6px;
   }
+  .forensic-card:last-child { border-right: none; }
 
   .card-title {
+    font-family: var(--font-mono);
     font-size: var(--ui-drawer-title-size);
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    padding-bottom: 4px;
-    border-bottom: 1px solid rgba(30, 41, 59, 0.6);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
   }
+  .card-title.cyan, .card-title.amber, .card-title.blue { color: var(--text-dim); }
+  .card-indicator { display: none; }
 
-  .card-indicator {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    display: inline-block;
+  .card-kv-grid { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--ui-card-kv-size);
+    line-height: 1.35;
   }
-  .card-title.cyan { color: #38bdf8; }
-  .card-title.cyan .card-indicator { background: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.6); }
-  .card-title.amber { color: var(--amber); }
-  .card-title.amber .card-indicator { background: var(--amber); box-shadow: 0 0 8px rgba(245, 158, 11, 0.6); }
-  .card-title.blue { color: #06b6d4; }
-  .card-title.blue .card-indicator { background: #06b6d4; box-shadow: 0 0 8px rgba(6, 182, 212, 0.6); }
-
-  .card-kv-grid { display: flex; flex-direction: column; gap: 4px; }
-  .card-row { display: flex; justify-content: space-between; font-size: var(--ui-card-kv-size); }
-  .card-label { color: var(--text-dim); }
-  .card-value { color: white; font-weight: 500; }
-  .highlight-red { color: #f87171 !important; font-weight: 700; }
-  .highlight-cyan { color: #38bdf8 !important; }
+  .card-label {
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .card-value {
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-weight: 500;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .highlight-red { color: #fca5a5 !important; font-weight: 600; }
+  .highlight-amber { color: #fcd34d !important; font-weight: 600; }
+  .highlight-green { color: #6ee7b7 !important; font-weight: 600; }
+  .highlight-cyan { color: var(--steel) !important; font-weight: 600; }
 
   /* BUTTONS & MODALS */
   .action-btn {
-    background: #1e293b;
-    border: 1px solid var(--border-bright);
-    color: white;
-    font-family: var(--font-mono);
+    background: #171a23;
+    border: 1px solid #2b303e;
+    color: #e5e7eb;
+    font-family: var(--font-sans);
     font-size: var(--ui-action-btn-size);
-    font-weight: 700;
+    font-weight: 500;
     padding: var(--ui-action-btn-pad);
     border-radius: 4px;
     cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
   }
-  .action-btn:hover { background: #334155; }
-  .action-btn.danger { background: var(--crimson-dark); border-color: var(--crimson); }
-  .action-btn.danger:hover { background: var(--crimson); }
-  .action-btn.tarpit { background: #6b21a8; border-color: #9333ea; }
-  .action-btn.tarpit:hover { background: #7e22ce; }
+  .action-btn:hover { background: #202431; border-color: #3e4558; color: #ffffff; }
+  .action-btn.danger { background: #b91c1c; border-color: #dc2626; color: #ffffff; font-weight: 600; }
+  .action-btn.danger:hover { background: #dc2626; border-color: #ef4444; }
+  .action-btn.tarpit { background: #1c202b; border-color: #32394a; color: #f3f4f6; }
+  .action-btn.tarpit:hover { background: #262b39; border-color: #4b5563; }
 
   .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(2, 6, 23, 0.88);
-    backdrop-filter: blur(8px);
+    background: rgba(5, 6, 9, 0.82);
+    backdrop-filter: blur(4px);
     display: none;
     align-items: center;
     justify-content: center;
@@ -1228,16 +1407,16 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
   .modal-overlay.active { display: flex !important; }
 
   .modal-window {
-    background: #090e1c;
-    border: 1px solid var(--cyan);
-    border-radius: 8px;
-    width: 600px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-bright);
+    border-radius: 7px;
+    width: 620px;
     max-height: 85vh;
     padding: 18px;
     display: flex;
     flex-direction: column;
     gap: 14px;
-    box-shadow: 0 0 35px var(--cyan-glow);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75);
   }
 
   .modal-header {
@@ -1258,14 +1437,14 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
   .btn-close:hover { color: white; }
 
   footer {
-    background: #040711;
+    background: #0c0e12;
     border-top: 1px solid var(--border);
-    padding: 6px 16px;
+    padding: var(--ui-footer-pad);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 10px;
-    color: var(--text-dim);
+    font-size: var(--ui-footer-size);
+    color: var(--text-muted);
     flex-shrink: 0;
   }
 </style>
@@ -1279,34 +1458,38 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
   <header>
     <div class="brand-group">
       <div class="brand-logo">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="var(--cyan)"/><line x1="12" y1="1" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="1" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="23" y2="12"/></svg>
-        <span style="font-weight: 800; letter-spacing: 0.12em; color: var(--cyan);">UNCLOAK</span>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#f3f4f6" stroke-width="2" stroke-linecap="round"><path d="M12 2L4 5v6c0 5.25 3.4 10.1 8 11.5 4.6-1.4 8-6.25 8-11.5V5l-8-3z"/><circle cx="12" cy="11" r="2.2" fill="#f3f4f6"/></svg>
+        <span>UNCLOAK</span>
       </div>
-      <div id="demo-mode-indicator" style="background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fbbf24; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px;">
-        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></span>
-        DEMO MODE (SIMULATED DATA)
+      <div id="demo-mode-indicator" style="background: #171511; border: 1px solid rgba(245, 158, 11, 0.35); color: #fcd34d; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 3px; letter-spacing: 0.03em; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;">
+        <span style="display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #f59e0b;"></span>
+        Simulated Telemetry
       </div>
+      <span class="header-divider"></span>
       <div class="nav-tabs">
-        <button class="nav-tab-btn active" id="tab-fleet" onclick="switchView('fleet')">[1] FLEET THREAT MATRIX</button>
-        <button class="nav-tab-btn" id="tab-campaign" onclick="switchView('campaign')">[2] CAMPAIGN CORRELATION</button>
-        <button class="nav-tab-btn" id="tab-drilldown" onclick="switchView('drilldown')">[3] HOST INVESTIGATION & LIVE TRIAGE</button>
+        <button class="nav-tab-btn active" id="tab-fleet" onclick="switchView('fleet')">Fleet Matrix <kbd>1</kbd></button>
+        <button class="nav-tab-btn" id="tab-campaign" onclick="switchView('campaign')">Campaign Correlation <kbd>2</kbd></button>
+        <button class="nav-tab-btn" id="tab-drilldown" onclick="switchView('drilldown')">Host Investigation <kbd>3</kbd></button>
       </div>
     </div>
 
     <div class="fleet-stats-strip">
-      <div class="stat-badge critical">
+      <div class="stat-metric critical" onclick="switchView('fleet'); setGridSeverityFilter('THREATS');" title="Click to filter active threat endpoints">
         <span class="live-dot pulsing"></span>
-        <strong id="badge-crit-hosts">2</strong> ACTIVE THREATS
+        <strong id="badge-crit-hosts">4</strong> Active Threats
       </div>
-      <div class="stat-badge">
+      <span class="header-divider"></span>
+      <div class="stat-metric">
         <span class="live-dot"></span>
-        <strong id="badge-total-hosts">10</strong> MONITORED HOSTS
+        <strong id="badge-total-hosts">32</strong> Hosts
       </div>
-      <div class="stat-badge">
-        <strong id="badge-total-sockets">1,528</strong> EXTENDED SOCKETS
+      <span class="header-divider"></span>
+      <div class="stat-metric">
+        <strong id="badge-total-sockets">5,613</strong> Sockets
       </div>
-      <button class="action-btn" id="density-toggle-btn" onclick="toggleDensity()" title="Toggle UI Density (Alt+Z)" style="border-color: var(--cyan); color: var(--cyan);">Density: Large (110%)</button>
-      <button class="action-btn" onclick="exportTelemetry()">[E] Export OCSF Telemetry</button>
+      <span class="header-divider"></span>
+      <button class="action-btn" id="density-toggle-btn" onclick="toggleDensity()" title="Toggle UI Density (Alt+Z)">Standard (100%)</button>
+      <button class="action-btn" onclick="exportTelemetry()">Export OCSF <kbd>E</kbd></button>
     </div>
   </header>
 
@@ -1317,42 +1500,55 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     <div class="view-panel active" id="view-fleet">
       <div class="fleet-filter-bar">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="color: var(--text-dim);">Filter Fleet:</span>
-          <input type="text" class="search-box" id="fleet-search" placeholder="Filter host, IP, subnet, C2... [/]" oninput="filterFleet(this.value)" style="width: 260px;">
+          <input type="text" class="search-box" id="fleet-search" placeholder="Filter hostname, IP, subnet, C2... [/]" oninput="filterFleet(this.value)" style="width: 240px;">
+          <div style="display: flex; gap: 3px; align-items: center; background: #0c0e13; padding: 2px; border-radius: 5px; border: 1px solid var(--border);">
+            <button class="view-switch-btn active" id="grid-sev-all" onclick="setGridSeverityFilter('ALL')">All (32)</button>
+            <button class="view-switch-btn" id="grid-sev-threats" onclick="setGridSeverityFilter('THREATS')" style="color: #fca5a5;">Threats (4)</button>
+            <button class="view-switch-btn" id="grid-sev-eval" onclick="setGridSeverityFilter('EVALUATING')" style="color: #fcd34d;">Evaluating (2)</button>
+            <button class="view-switch-btn" id="grid-sev-healthy" onclick="setGridSeverityFilter('HEALTHY')">Nominal (25)</button>
+            <button class="view-switch-btn" id="grid-sev-muted" onclick="setGridSeverityFilter('MUTED')">Muted (1)</button>
+          </div>
         </div>
-        <div style="display: flex; gap: 4px; background: #0b1120; padding: 3px; border-radius: 6px; border: 1px solid var(--border);">
-          <button class="view-switch-btn active" id="btn-fleet-grid" onclick="switchFleetLayout('grid')">TIERED GRID</button>
-          <button class="view-switch-btn" id="btn-fleet-table" onclick="switchFleetLayout('table')">DENSE FLEET TABLE</button>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="color: var(--text-dim); font-size: 11px;">
+            Agents: <strong id="agent-health-label" style="color: var(--text-main);">31 of 32 Active (1 Muted)</strong> │ Heartbeat: <strong style="color: var(--text-main); font-family: var(--font-mono);">15s</strong>
+          </div>
+          <div style="display: flex; gap: 2px; background: #0c0e13; padding: 2px; border-radius: 5px; border: 1px solid var(--border);">
+            <button class="view-switch-btn active" id="btn-fleet-grid" onclick="switchFleetLayout('grid')">Tiered Grid</button>
+            <button class="view-switch-btn" id="btn-fleet-table" onclick="switchFleetLayout('table')">Table View</button>
+          </div>
         </div>
-        <div style="color: var(--text-dim); font-size: 10px;">
-          Agent Health: <strong id="agent-health-label" style="color: var(--green);">All 10 Agents Active (0 Muted)</strong> | Heartbeat: <strong>15s Interval</strong>
-        </div>
+      </div>
+
+      <!-- PRIORITY INCIDENT QUEUE RIBBON (Pinned Above Fold so all Active Threats remain immediately visible) -->
+      <div class="priority-ribbon" id="priority-incident-ribbon">
+        <!-- Dynamically hydrated by renderFleetSubnets() -->
       </div>
 
       <!-- Subnet Grid Rendered Dynamically (Single Controlled Scroll) -->
-      <div id="fleet-subnets-container" style="display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px;">
+      <div id="fleet-subnets-container" style="display: flex; flex-direction: column; gap: 7px; flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px;">
       </div>
 
-      <!-- Enterprise Dense Fleet Table (Single Controlled Scroll, Zero Window Bloat) -->
+      <!-- Enterprise Dense Fleet Table -->
       <div id="fleet-table-container" style="display: none; flex-direction: column; gap: 6px; flex: 1; min-height: 0; overflow: hidden;">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; flex-shrink: 0;">
-          <div style="display: flex; gap: 6px; align-items: center;">
-            <span style="color: var(--text-dim); font-size: 11px; margin-right: 4px; font-weight: 700;">SCOPE:</span>
-            <button class="view-switch-btn active" id="filter-btn-all" onclick="filterTableByScope('ALL')">ALL (32)</button>
-            <button class="view-switch-btn" id="filter-btn-threats" onclick="filterTableByScope('THREATS')" style="color: #f87171;">THREATS (4)</button>
-            <button class="view-switch-btn" id="filter-btn-tier0" onclick="filterTableByScope('TIER-0')" style="color: #c084fc;">TIER-0 IDENTITY (5)</button>
-            <button class="view-switch-btn" id="filter-btn-tier1" onclick="filterTableByScope('TIER-1')">TIER-1 SERVERS (10)</button>
-            <button class="view-switch-btn" id="filter-btn-tier2" onclick="filterTableByScope('TIER-2')">TIER-2 WORKSTATIONS (17)</button>
-            <button class="view-switch-btn" id="filter-btn-muted" onclick="filterTableByScope('MUTED')" style="color: #f59e0b;">DISCONNECTED (1)</button>
-            <button class="view-switch-btn" id="filter-btn-mitigated" onclick="filterTableByScope('MITIGATED')" style="color: #a855f7;">BLOCKED / MITIGATED (4)</button>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <span style="color: var(--text-muted); font-size: 11px; margin-right: 4px; font-weight: 600;">Scope:</span>
+            <button class="view-switch-btn active" id="filter-btn-all" onclick="filterTableByScope('ALL')">All (32)</button>
+            <button class="view-switch-btn" id="filter-btn-threats" onclick="filterTableByScope('THREATS')" style="color: #fca5a5;">Threats (4)</button>
+            <button class="view-switch-btn" id="filter-btn-tier0" onclick="filterTableByScope('TIER-0')">Tier-0 Identity (5)</button>
+            <button class="view-switch-btn" id="filter-btn-tier1" onclick="filterTableByScope('TIER-1')">Tier-1 Servers (10)</button>
+            <button class="view-switch-btn" id="filter-btn-tier2" onclick="filterTableByScope('TIER-2')">Tier-2 Workstations (17)</button>
+            <button class="view-switch-btn" id="filter-btn-muted" onclick="filterTableByScope('MUTED')">Disconnected (1)</button>
+            <button class="view-switch-btn" id="filter-btn-mitigated" onclick="filterTableByScope('MITIGATED')">Contained (4)</button>
           </div>
-          <div id="fleet-table-counter" style="color: var(--text-dim); font-size: 11px; font-weight: 700;">Showing 32 of 32 Monitored Endpoints</div>
+          <div id="fleet-table-counter" style="color: var(--text-dim); font-size: 11px; font-weight: 500;">Showing 32 of 32 Monitored Endpoints</div>
         </div>
         <div class="table-wrapper" style="flex: 1; min-height: 0; overflow-y: auto; overflow-x: auto;">
         <table>
           <thead>
             <tr>
-              <th style="width: 80px;">STATUS</th>
+              <th style="width: 100px;">STATUS</th>
               <th>HOSTNAME</th>
               <th>IP ADDRESS</th>
               <th>AD ARCHITECTURE TIER</th>
@@ -1372,52 +1568,42 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       </div>
     </div>
 
-    <!-- VIEW 2: CAMPAIGN CORRELATION (STREAMLINED MASTER-DETAIL & SVG ATTACK GRAPH) -->
+    <!-- VIEW 2: CAMPAIGN CORRELATION (STREAMLINED MASTER-DETAIL & KILL-CHAIN GRAPH) -->
     <div class="view-panel" id="view-campaign">
-      <div class="fleet-filter-bar">
-        <div>
-          <span style="font-weight: 700; color: white;">Cross-Host Intrusion Correlation Engine:</span>
-          <span style="color: var(--text-dim); margin-left: 8px;">Clusters endpoints communicating with matching JA4 TLS handshakes and jitter dispersion profiles.</span>
+      <!-- Campaign KPI Metrics Strip -->
+      <div class="campaign-kpi-strip">
+        <div class="campaign-kpi-cell">
+          <div class="card-label" style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">Active Outbreak Clusters</div>
+          <div class="card-value highlight-red" id="campaign-count-label" style="font-size: 13.5px; margin-top: 2px; font-weight: 600; text-align: left;">2 Active Campaigns (Alpha & Beta)</div>
         </div>
-        <div style="color: #f87171; font-weight: 700;" id="campaign-count-label">2 ACTIVE CAMPAIGNS DETECTED</div>
-      </div>
-
-      <!-- Campaign KPI Metrics Strip (4 Sleek Badges) -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px;">
-        <div class="forensic-card" style="padding: 7px 10px; border-color: rgba(239, 68, 68, 0.4);">
-          <div class="card-label" style="font-size: 8.5px; color: #f87171;">ACTIVE OUTBREAKS</div>
-          <div class="card-value highlight-red" style="font-size: 14px; margin-top: 2px; font-weight: 800;">2 CLUSTERS</div>
+        <div class="campaign-kpi-cell">
+          <div class="card-label" style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">Correlated Compromised Hosts</div>
+          <div class="card-value" id="camp-kpi-hosts" style="font-size: 13.5px; margin-top: 2px; font-weight: 600; color: var(--text-main); text-align: left;">4 Endpoints (2 Crit, 2 High)</div>
         </div>
-        <div class="forensic-card" style="padding: 7px 10px;">
-          <div class="card-label" style="font-size: 8.5px; color: var(--text-dim);">COMPROMISED HOSTS</div>
-          <div class="card-value" style="font-size: 14px; margin-top: 2px; font-weight: 800; color: white;">3 ENDPOINTS (Tier-1 & WS)</div>
+        <div class="campaign-kpi-cell">
+          <div class="card-label" style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;">TLS JA4 & IAT Dispersion Signatures</div>
+          <div class="card-value" style="font-size: 13.5px; margin-top: 2px; font-weight: 600; color: var(--steel); text-align: left;">2 Matched Signatures (99.4% Confidence)</div>
         </div>
-        <div class="forensic-card" style="padding: 7px 10px;">
-          <div class="card-label" style="font-size: 8.5px; color: var(--text-dim);">EXTRACTED JA4s</div>
-          <div class="card-value highlight-cyan" style="font-size: 14px; margin-top: 2px; font-weight: 800;">2 SIGNATURES (100% Match)</div>
-        </div>
-        <div class="forensic-card" style="padding: 7px 10px; border-color: rgba(239, 68, 68, 0.4); display: flex; flex-direction: column; justify-content: space-between;">
-          <div class="card-label" style="font-size: 8.5px; color: #f87171;">GLOBAL SEVER ACTION</div>
-          <button class="action-btn danger" onclick="severAllCampaigns()" style="font-weight: 700; font-size: 10px; padding: 3px 8px; width: 100%;">[!] Sever All Outbreaks (3 Sockets)</button>
+        <div class="campaign-kpi-cell" style="align-items: flex-end;">
+          <button class="action-btn danger" onclick="severAllCampaigns()" style="font-size: 11.5px; padding: 6px 12px;">Sever All Outbreaks (4 Hosts / 5 Sockets)</button>
         </div>
       </div>
 
-      <!-- MASTER-DETAIL SPLIT-VIEW (35% / 65%, NO DUPLICATION, ZERO SCROLL) -->
+      <!-- MASTER-DETAIL SPLIT-VIEW (33% / 67%) -->
       <div class="campaign-split-view">
-        
-        <!-- LEFT COLUMN (35%): OUTBREAK HIT-LIST -->
-        <div style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto;">
-          <div style="font-weight: 800; color: var(--cyan); font-size: 11px; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
-            <span>OUTBREAK HIT-LIST</span>
-            <span style="font-size: 9px; color: var(--text-dim);">CLICK TO INSPECT TOPOLOGY</span>
+        <!-- LEFT COLUMN: OUTBREAK HIT-LIST -->
+        <div style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto; padding-right: 2px;">
+          <div style="font-weight: 600; color: var(--text-dim); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid var(--border); padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
+            <span>Correlated Outbreak Clusters</span>
+            <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">Select cluster to inspect</span>
           </div>
-          <div id="campaigns-container" style="display: flex; flex-direction: column; gap: 8px;">
+          <div id="campaigns-container" style="display: flex; flex-direction: column; gap: 9px;">
             <!-- Hydrated dynamically by renderCampaigns() -->
           </div>
         </div>
 
-        <!-- RIGHT COLUMN (65%): VISUAL ATTACK TOPOLOGY GRAPH & THREAT INTEL -->
-        <div id="campaign-detail-container" style="background: #090e1c; border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; overflow-y: hidden;">
+        <!-- RIGHT COLUMN: STRUCTURED KILL-CHAIN TOPOLOGY & EVIDENCE MATRIX -->
+        <div id="campaign-detail-container" style="background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; overflow-y: auto; gap: 10px;">
           <!-- Hydrated dynamically by renderCampaignDetail() -->
         </div>
       </div>
@@ -1427,60 +1613,64 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     <div class="view-panel" id="view-drilldown">
       <div class="staleness-banner" id="staleness-alert-banner"></div>
       <div class="drilldown-bar">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <span style="color: var(--text-dim);">Selected Target Host:</span>
-          <select id="host-dropdown" class="search-box" style="width: 220px;" onchange="changeSelectedHost(this.value)">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="color: var(--text-muted); font-weight: 500; font-size: 11.5px;">Target Endpoint</span>
+          <select id="host-dropdown" class="search-box" style="width: 230px; font-family: var(--font-mono); font-weight: 600;" onchange="changeSelectedHost(this.value)">
           </select>
           <span class="host-pill crit" id="host-threat-pill">CRITICAL (98.7%)</span>
         </div>
-                <div style="font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 14px;">
-          <span>OS: <strong style="color: white;" id="host-os-label">Windows Server 2022</strong></span>
-          <span>IP: <strong style="color: white;" id="host-ip-label">10.0.0.15</strong></span>
-          <button class="action-btn" id="drilldown-isolate-btn" onclick="toggleHostIsolation()" style="padding: 3px 10px; font-weight: 700; border-color: #f87171; color: #f87171;">Isolate Host</button>
+        <div style="font-size: 11.5px; color: var(--text-dim); display: flex; align-items: center; gap: 16px;">
+          <span>AD Tier: <strong style="color: var(--text-main); font-family: var(--font-mono);" id="host-tier-label">Tier-1 App & Jump</strong></span>
+          <span>OS: <strong style="color: var(--text-main);" id="host-os-label">Windows Server 2022 (x64)</strong></span>
+          <span>IPv4: <strong style="color: var(--text-main); font-family: var(--font-mono);" id="host-ip-label">10.0.1.15</strong></span>
+          <button class="action-btn" id="drilldown-isolate-btn" onclick="toggleHostIsolation()" style="border-color: rgba(239, 68, 68, 0.45); color: #fca5a5;">Isolate Host (WFP Quarantine)</button>
         </div>
       </div>
 
       <!-- Incident Banner -->
       <div class="incident-banner" id="incident-banner">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <div class="incident-tag">CRITICAL INCIDENT</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="incident-tag" id="inc-badge-tag">Active C2</div>
           <div>
-            <div style="font-weight: 700; color: white;" id="inc-title">CRITICAL C2 BEACON ISOLATED</div>
-            <div style="color: var(--text-dim); font-size: 10px;">
-              TARGET: <span id="inc-target" style="color: #fca5a5;">193.26.158.114:443 (Sliver C2)</span> │ 
-              PID: <span id="inc-pid">5824 (update.exe)</span> │ 
-              STATUS: <span id="inc-status" style="color: #fca5a5;">Active (Live)</span>
+            <div style="font-weight: 600; color: var(--text-main); font-size: 12.5px;" id="inc-title">SLIVER C2 BEACON ISOLATED (HTTPS / DIRECT IP)</div>
+            <div style="color: var(--text-dim); font-size: 11px; margin-top: 1px; font-family: var(--font-mono);">
+              Socket: <span id="inc-target" style="color: #fca5a5; font-weight: 600;">10.0.1.15:49152 -&gt; 193.26.158.114:443</span> │
+              Process: <span id="inc-pid" style="color: var(--text-main); font-weight: 600;">update.exe (PID 5824)</span> │
+              State: <span id="inc-status" style="color: #fca5a5; font-weight: 600;">ESTABLISHED</span>
             </div>
           </div>
         </div>
-        <button class="action-btn danger" onclick="severCurrentIncident()">Sever Connection</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="action-btn tarpit" onclick="tarpitSelectedFlow()" title="Enforce WFP Outbound Firewall Block on Binary">Firewall Contain</button>
+          <button class="action-btn danger" onclick="severCurrentIncident()">Sever Socket <kbd style="background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.25); color: white;">K</kbd></button>
+        </div>
       </div>
 
       <!-- Sub-Tabs Bar for Selected Host -->
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
-        <div class="nav-tabs" style="background: #090e1c;">
-          <button class="nav-tab-btn active" id="subtab-btn-flows" onclick="switchHostSubtab('flows')">[A] NETWORK SOCKETS & JITTER (<span id="flows-count-label">0</span>)</button>
-          <button class="nav-tab-btn" id="subtab-btn-procs" onclick="switchHostSubtab('procs')">[B] ALL RUNNING PROCESSES (<span id="procs-count-label">0</span>)</button>
-          <button class="nav-tab-btn" id="subtab-btn-history" onclick="switchHostSubtab('history')">[C] CONNECTION HISTORY & TIMELINE (<span id="history-count-label">0</span>)</button>
-          <button class="nav-tab-btn" id="subtab-btn-whitelist" onclick="switchHostSubtab('whitelist')">[D] MITIGATION & WHITELIST LEDGER (<span id="whitelist-count-label">2</span>)</button>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 0;">
+        <div class="sub-nav-tabs" style="border-bottom: none;">
+          <button class="nav-tab-btn active" id="subtab-btn-flows" onclick="switchHostSubtab('flows')">Network Sockets (<span id="flows-count-label">8</span>) <kbd>A</kbd></button>
+          <button class="nav-tab-btn" id="subtab-btn-procs" onclick="switchHostSubtab('procs')">Running Processes (<span id="procs-count-label">9</span>) <kbd>B</kbd></button>
+          <button class="nav-tab-btn" id="subtab-btn-history" onclick="switchHostSubtab('history')">Socket Timeline (<span id="history-count-label">10</span>) <kbd>C</kbd></button>
+          <button class="nav-tab-btn" id="subtab-btn-whitelist" onclick="switchHostSubtab('whitelist')">Containment & Allowlist (<span id="whitelist-count-label">2</span>) <kbd>D</kbd></button>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <input type="text" class="search-box" id="host-sub-search" placeholder="Search processes, sockets, IPs... [/]" oninput="filterHostSubtab(this.value)" style="width: 280px;">
-          <button class="action-btn" onclick="exportHostAuditLog()">Export Host Audit</button>
+        <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 4px;">
+          <input type="text" class="search-box" id="host-sub-search" placeholder="Filter sockets, PIDs, domains, JA4... [/]" oninput="filterHostSubtab(this.value)" style="width: 240px;">
+          <button class="action-btn" onclick="exportHostAuditLog()">Export Audit (.csv)</button>
         </div>
       </div>
 
       <!-- PANE 1: ACTIVE NETWORK SOCKETS & FLOWS -->
-      <div class="table-wrapper" id="pane-flows">
+      <div class="table-wrapper" id="pane-flows" style="flex: 1; min-height: 0;">
         <table>
           <thead>
             <tr>
               <th>FIRST SEEN (UTC)</th>
               <th>PID</th>
-              <th>PROCESS</th>
-              <th>DESTINATION</th>
-              <th>SNI / DOMAIN</th>
-              <th>INTERVAL & LOGIC PULSE</th>
+              <th>PROCESS & USER</th>
+              <th>LOCAL -&gt; REMOTE SOCKET</th>
+              <th>SNI / TLS JA4</th>
+              <th>CADENCE & IAT PULSE</th>
               <th>DURATION</th>
               <th>PAYLOAD</th>
               <th style="text-align: right;">THREAT SCORE</th>
@@ -1493,7 +1683,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       </div>
 
       <!-- PANE 2: ALL RUNNING PROCESSES ON HOST -->
-      <div class="table-wrapper" id="pane-procs" style="display: none; max-height: 400px; overflow-y: auto;">
+      <div class="table-wrapper" id="pane-procs" style="display: none; flex: 1; min-height: 0; overflow-y: auto;">
         <table>
           <thead>
             <tr>
@@ -1516,16 +1706,16 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       </div>
 
       <!-- PANE 3: CHRONOLOGICAL CONNECTION AUDIT LOG -->
-      <div id="pane-history" style="display: none;">
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; background: #0b1120; padding: 6px 12px; border: 1px solid var(--border); border-radius: 4px;">
+      <div id="pane-history" style="display: none; flex: 1; min-height: 0;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; background: var(--bg-panel); padding: 6px 12px; border: 1px solid var(--border); border-radius: 5px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 11px; color: var(--text-dim); font-weight: 700;">FILTER BY PID:</span>
+            <span style="font-size: 11px; color: var(--text-dim); font-weight: 600;">Filter by PID:</span>
             <input type="number" class="search-box" id="timeline-pid-input" placeholder="e.g. 5824" oninput="filterTimelineByPid(this.value)" style="width: 140px; padding: 4px 8px;">
             <button class="action-btn" onclick="clearTimelinePidFilter()" style="padding: 4px 10px;">All PIDs</button>
           </div>
-          <div id="timeline-pid-filter-label" style="font-size: 11px; color: var(--cyan); font-weight: 700; display: none;"></div>
+          <div id="timeline-pid-filter-label" style="font-size: 11px; color: var(--steel); font-weight: 600; display: none;"></div>
         </div>
-        <div class="table-wrapper" style="max-height: 380px; overflow-y: auto;">
+        <div class="table-wrapper" style="max-height: 300px; overflow-y: auto;">
         <table>
           <thead>
             <tr>
@@ -1547,169 +1737,178 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         </div>
       </div>
 
-
-        <!-- PANE D: MITIGATION & WHITELIST POLICY LEDGER -->
-        <div id="pane-whitelist" style="display: none;">
-          <!-- Top Section: Active Enforced Mitigations (Blocked Threats) -->
-          <div style="background: #090e1c; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 10px;">
-              <div>
-                <strong style="color: #f87171; font-size: 12px;">AUTONOMOUS PREVENTION & KERNEL MITIGATION EVENTS (BLOCKED)</strong>
-                <div style="color: var(--text-dim); font-size: 10.5px; margin-top: 2px;">Sockets terminated via SetTcpEntry or frozen via TCP Zero-Window tarpit.</div>
-              </div>
-              <span class="host-pill crit" style="font-size: 10px;">2 ACTIVE BLOCKS ENFORCED</span>
+      <!-- PANE D: MITIGATION & WHITELIST POLICY LEDGER -->
+      <div id="pane-whitelist" style="display: none; flex: 1; min-height: 0; overflow-y: auto;">
+        <div style="background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px;">
+            <div>
+              <strong style="color: var(--text-main); font-size: 12px;">Kernel Socket Eviction & WFP Containment Ledger</strong>
+              <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">Sockets severed via SetTcpEntry(DELETE_TCB) or binaries blocked via Windows Filtering Platform (AdvFirewall).</div>
             </div>
-            <div class="table-wrapper" style="max-height: 200px; overflow-y: auto;">
-              <table>
-                <thead>
-                  <tr>
-                    <th>TIMESTAMP (UTC)</th>
-                    <th>TARGET HOST</th>
-                    <th>PROCESS (PID)</th>
-                    <th>DESTINATION</th>
-                    <th>TRIGGER HEURISTIC</th>
-                    <th>ENFORCEMENT METHOD</th>
-                    <th style="text-align: center;">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody id="mitigation-tbody">
-                  <tr style="background: rgba(239, 68, 68, 0.08);">
-                    <td style="white-space: nowrap; font-size: 11px;">2026-11-02 14:26:45 UTC</td>
-                    <td><strong>WIN-PROD-SRV01</strong></td>
-                    <td style="color: #f87171;"><strong>update.exe (5824)</strong></td>
-                    <td>193.26.158.114:443</td>
-                    <td><span style="color: #f87171;">Rigid 8.4s Cadence (Sliver C2)</span></td>
-                    <td><span class="host-pill crit" style="font-size: 9px;">KERNEL SetTcpEntry SEVERED</span></td>
-                    <td style="text-align: center;">
-                      <button class="action-btn" onclick="openWhitelistModal(5824, 'update.exe', '193.26.158.114:443', 'WIN-PROD-SRV01')" style="padding: 2px 8px; border-color: var(--green); color: var(--green); font-weight: 700;">Resolve False Positive</button>
-                    </td>
-                  </tr>
-                  <tr style="background: rgba(168, 85, 247, 0.08);">
-                    <td style="white-space: nowrap; font-size: 11px;">2026-11-02 14:26:10 UTC</td>
-                    <td><strong>WIN-APP-SRV02</strong></td>
-                    <td style="color: #c084fc;"><strong>rundll32.exe (6712)</strong></td>
-                    <td>cdn-azure-edge.net:8443</td>
-                    <td><span style="color: #c084fc;">Domain Fronted 15.0s (Cobalt Strike)</span></td>
-                    <td><span class="host-pill arch" style="font-size: 9px; border-color: #a855f7; color: #d8b4fe;">TCP ZERO-WINDOW TARPITTED</span></td>
-                    <td style="text-align: center;">
-                      <button class="action-btn" onclick="openWhitelistModal(6712, 'rundll32.exe', 'cdn-azure-edge.net:8443', 'WIN-APP-SRV02')" style="padding: 2px 8px; border-color: var(--green); color: var(--green); font-weight: 700;">Resolve False Positive</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <span class="host-pill crit" style="font-size: 10px;">2 Enforced Actions</span>
           </div>
-
-          <!-- Bottom Section: Active Enterprise Whitelist Policies -->
-          <div style="background: #090e1c; border: 1px solid var(--border); border-radius: 6px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 10px;">
-              <div>
-                <strong style="color: var(--green); font-size: 12px;">ACTIVE WHITELIST EXEMPTIONS & ALLOW POLICIES</strong>
-                <div style="color: var(--text-dim); font-size: 10.5px; margin-top: 2px;">Pre-approved enterprise applications exempted from beacon termination heuristics.</div>
-              </div>
-              <button class="action-btn" onclick="openWhitelistModal(0, '', '', '')" style="padding: 3px 10px; border-color: var(--green); color: var(--green); font-weight: 700;">+ Create Custom Rule</button>
-            </div>
-            <div class="table-wrapper" style="max-height: 220px; overflow-y: auto;">
-              <table>
-                <thead>
-                  <tr>
-                    <th>RULE ID</th>
-                    <th>SCOPE</th>
-                    <th>TARGET ENTITY</th>
-                    <th>MATCH CRITERIA</th>
-                    <th>SOC AUDIT JUSTIFICATION</th>
-                    <th>CREATED AT</th>
-                    <th style="text-align: center;">ACTIONS</th>
-                  </tr>
-                </thead>
-                <tbody id="whitelist-rules-tbody">
-                  <tr>
-                    <td><strong style="color: var(--cyan);">WL-2026-001</strong></td>
-                    <td><span class="host-pill arch" style="font-size: 9px; border-color: var(--cyan); color: var(--cyan);">GLOBAL (All 32 Hosts)</span></td>
-                    <td><strong>teams.exe</strong></td>
-                    <td style="font-size: 10.5px; color: var(--text-dim);">SHA256 + *.teams.microsoft.com</td>
-                    <td style="font-size: 11px;">Microsoft Teams enterprise telemetry - verified vendor binary</td>
-                    <td style="font-size: 10.5px; color: var(--text-dim);">2026-11-01 08:00 UTC</td>
-                    <td style="text-align: center;">
-                      <button class="action-btn danger" onclick="revokeWhitelistRule('WL-2026-001')" style="padding: 2px 7px; font-size: 10px;">Revoke</button>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td><strong style="color: var(--cyan);">WL-2026-002</strong></td>
-                    <td><span class="host-pill arch" style="font-size: 9px; border-color: var(--purple); color: #d8b4fe;">LOCAL (DC01-PROD)</span></td>
-                    <td><strong>azure_ad_sync.exe</strong></td>
-                    <td style="font-size: 10.5px; color: var(--text-dim);">SHA256 + *.login.microsoftonline.com</td>
-                    <td style="font-size: 11px;">Entra ID Hybrid Password Hash Sync Agent</td>
-                    <td style="font-size: 10.5px; color: var(--text-dim);">2026-11-01 09:30 UTC</td>
-                    <td style="text-align: center;">
-                      <button class="action-btn danger" onclick="revokeWhitelistRule('WL-2026-002')" style="padding: 2px 7px; font-size: 10px;">Revoke</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div class="table-wrapper" style="max-height: 160px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>TIMESTAMP (UTC)</th>
+                  <th>TARGET HOST</th>
+                  <th>PROCESS (PID)</th>
+                  <th>DESTINATION</th>
+                  <th>TRIGGER HEURISTIC (SCHEMA V1)</th>
+                  <th>ENFORCEMENT METHOD</th>
+                  <th style="text-align: center;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="mitigation-tbody">
+                <tr class="row-threat">
+                  <td style="white-space: nowrap; font-size: 11px;">2026-11-02 14:26:45 UTC</td>
+                  <td><strong>WIN-PROD-SRV01</strong></td>
+                  <td style="color: #fca5a5;"><strong>update.exe (5824)</strong></td>
+                  <td>193.26.158.114:443</td>
+                  <td><span style="color: #fca5a5;">IAT MAD 0.08 │ 8.4s Cadence (Sliver C2)</span></td>
+                  <td><span class="host-pill crit" style="font-size: 9.5px;">SetTcpEntry Severed</span></td>
+                  <td style="text-align: center;">
+                    <button class="action-btn" onclick="openWhitelistModal(5824, 'update.exe', '193.26.158.114:443', 'WIN-PROD-SRV01')" style="padding: 2px 8px;">Allowlist / Restore</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="white-space: nowrap; font-size: 11px;">2026-11-02 14:26:10 UTC</td>
+                  <td><strong>WIN-APP-SRV02</strong></td>
+                  <td style="color: #fcd34d;"><strong>rundll32.exe (6712)</strong></td>
+                  <td>cdn-azure-edge.net:8443</td>
+                  <td><span style="color: #fcd34d;">IAT MAD 0.06 │ 15.0s CDN Fronted (Cobalt Strike)</span></td>
+                  <td><span class="host-pill high" style="font-size: 9.5px;">WFP Firewall Contained</span></td>
+                  <td style="text-align: center;">
+                    <button class="action-btn" onclick="openWhitelistModal(6712, 'rundll32.exe', 'cdn-azure-edge.net:8443', 'WIN-APP-SRV02')" style="padding: 2px 8px;">Allowlist / Restore</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-
-      <!-- Tri-Pane Drawer -->
-      <div class="drawer-container">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px;">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="var(--cyan)"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-            FORENSIC SESSION ATTRIBUTION : <span id="drawer-host-header">193.26.158.114:443 (PID 5824)</span>
+        <div style="background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px;">
+            <div>
+              <strong style="color: var(--text-main); font-size: 12px;">Active Enterprise Allowlist Exemptions</strong>
+              <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">Signed vendor binaries and expected periodic daemons exempted from automated C2 scoring.</div>
+            </div>
+            <button class="action-btn" onclick="openWhitelistModal(0, '', '', '')" style="padding: 3px 10px;">+ Create Allowlist Rule</button>
           </div>
-          <button class="action-btn" onclick="openDossierModal()">Open Forensic Dossier (I)</button>
+          <div class="table-wrapper" style="max-height: 170px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>RULE ID</th>
+                  <th>SCOPE</th>
+                  <th>TARGET ENTITY</th>
+                  <th>MATCH CRITERIA</th>
+                  <th>SOC AUDIT JUSTIFICATION</th>
+                  <th>CREATED AT</th>
+                  <th style="text-align: center;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="whitelist-rules-tbody">
+                <tr>
+                  <td><strong style="color: var(--steel);">WL-2026-001</strong></td>
+                  <td><span class="host-pill arch" style="font-size: 9.5px;">GLOBAL (All 32 Hosts)</span></td>
+                  <td><strong>teams.exe</strong></td>
+                  <td style="font-size: 11px; color: var(--text-dim);">SHA256 + *.teams.microsoft.com</td>
+                  <td style="font-size: 11px;">Microsoft Teams enterprise telemetry - verified vendor binary</td>
+                  <td style="font-size: 11px; color: var(--text-dim);">2026-11-01 08:00 UTC</td>
+                  <td style="text-align: center;">
+                    <button class="action-btn danger" onclick="revokeWhitelistRule('WL-2026-001')" style="padding: 2px 7px; font-size: 10px;">Revoke</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong style="color: var(--steel);">WL-2026-002</strong></td>
+                  <td><span class="host-pill arch" style="font-size: 9.5px;">LOCAL (DC01-PROD)</span></td>
+                  <td><strong>azure_ad_sync.exe</strong></td>
+                  <td style="font-size: 11px; color: var(--text-dim);">SHA256 + *.login.microsoftonline.com</td>
+                  <td style="font-size: 11px;">Entra ID Hybrid Password Hash Sync Agent</td>
+                  <td style="font-size: 11px; color: var(--text-dim);">2026-11-01 09:30 UTC</td>
+                  <td style="text-align: center;">
+                    <button class="action-btn danger" onclick="revokeWhitelistRule('WL-2026-002')" style="padding: 2px 7px; font-size: 10px;">Revoke</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unified 3-Column Technical Inspector Sheet -->
+      <div class="drawer-container">
+        <div class="drawer-topbar">
+          <div style="font-weight: 600; color: var(--text-main); font-size: 11.5px; display: flex; align-items: center; gap: 8px;">
+            <span style="color: var(--text-muted); font-family: var(--font-mono);">INSPECTOR //</span>
+            <span id="drawer-host-header" style="color: var(--text-main); font-family: var(--font-mono);">10.0.1.15:49152 -&gt; 193.26.158.114:443 (PID 5824)</span>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">Schema: OCSF v1.1 / FlowFeaturesV1</span>
+            <button class="action-btn" onclick="openDossierModal()" style="padding: 3px 9px; font-size: 11px;">Full Dossier <kbd>I</kbd></button>
+          </div>
         </div>
 
         <div class="drawer-cards">
-          <!-- Card 1 -->
+          <!-- Column 1: Process & Kernel Attribution -->
           <div class="forensic-card">
-            <div class="card-title cyan"><span class="card-indicator"></span>HOST ATTRIBUTION</div>
+            <div class="card-title"><span class="card-indicator"></span>01 / PROCESS & KERNEL ATTRIBUTION</div>
             <div class="card-kv-grid">
-              <div class="card-row"><span class="card-label">PID</span><span class="card-value" id="c1-pid">5824</span></div>
-              <div class="card-row"><span class="card-label">Process</span><span class="card-value highlight-red" id="c1-proc">update.exe</span></div>
-              <div class="card-row"><span class="card-label">Binary Path</span><span class="card-value" id="c1-path">AppData\\Roaming\\update.exe</span></div>
-              <div class="card-row"><span class="card-label">Signature</span><span class="card-value highlight-red" id="c1-sig">Unsigned Binary (On-Disk PE)</span></div>
-              <div class="card-row"><span class="card-label">SHA-256</span><span class="card-value" id="c1-sha">e3b0c44298fc1c..</span></div>
-              <div class="card-row"><span class="card-label">Process Start Time</span><span class="card-value" id="c1-start">2026-11-02 14:10:02 UTC</span></div>
-              <div class="card-row"><span class="card-label">Parent Lineage</span><span class="card-value" id="c1-parent">explorer.exe (PID 2110) -> cmd.exe (PID 4920) -> update.exe (PID 5824)</span></div>
+              <div class="card-row"><span class="card-label">Process & PID</span><span class="card-value highlight-red" id="c1-proc">update.exe (PID 5824)</span></div>
+              <div class="card-row"><span class="card-label">ProcessGuid</span><span class="card-value" id="c1-guid" style="color: var(--text-dim);">{61b338eb-5824-0001-a4f9-82d17c63e019}</span></div>
+              <div class="card-row"><span class="card-label">User Context</span><span class="card-value" id="c1-pid">CORP\\svc_SQLAdmin (Elevated)</span></div>
+              <div class="card-row"><span class="card-label">Binary Path</span><span class="card-value" id="c1-path">C:\\Users\\Target\\AppData\\Roaming\\update.exe</span></div>
+              <div class="card-row"><span class="card-label">Command Line</span><span class="card-value" id="c1-cmd" style="color: var(--text-dim);">update.exe --headless --sync-pool 193.26.158.114</span></div>
+              <div class="card-row"><span class="card-label">Authenticode</span><span class="card-value highlight-red" id="c1-sig">Unsigned Binary (On-Disk PE)</span></div>
+              <div class="card-row">
+                <span class="card-label">SHA-256 Hash</span>
+                <span class="card-value" style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+                  <span id="c1-sha" title="a4f982d17c63e01948b55209df712839ca004918273645519283746501928374">a4f982d17c63e019..8374</span>
+                  <button class="action-btn" onclick="copyCurrentSha256()" style="padding: 1px 5px; font-size: 9.5px;" title="Copy full 64-char SHA-256 hash">Copy</button>
+                </span>
+              </div>
+              <div class="card-row"><span class="card-label">Parent Lineage</span><span class="card-value" id="c1-parent">explorer.exe (2110) -&gt; cmd.exe (4920) -&gt; update.exe (5824)</span></div>
             </div>
+            <span id="c1-start" style="display: none;">2026-11-02 14:10:02 UTC</span>
           </div>
 
-          <!-- Card 2 -->
+          <!-- Column 2: FlowFeaturesV1 Cadence Telemetry -->
           <div class="forensic-card">
-            <div class="card-title amber"><span class="card-indicator"></span>CADENCE & TIMING</div>
+            <div class="card-title"><span class="card-indicator"></span>02 / FLOWFEATURESV1 CADENCE TELEMETRY</div>
             <div class="card-kv-grid">
-              <div class="card-row"><span class="card-label">Interval</span><span class="card-value" id="c2-int">8.4s (±0.8s)</span></div>
-              <div class="card-row"><span class="card-label">Beacon State</span><span class="card-value highlight-red" id="c2-state">ACTIVE (C2 Live)</span></div>
-              <div class="card-row"><span class="card-label">Logic Wave</span><span class="card-value" id="c2-pulse"></span></div>
-              <div class="card-row"><span class="card-label">Payload Profile</span><span class="card-value" id="c2-payload">512 B (Fixed)</span></div>
-              <div class="card-row"><span class="card-label">Burst Distribution</span><span class="card-value" id="c2-bursts">14 bursts / 2m</span></div>
-              <div class="card-row"><span class="card-label">Shannon Entropy</span><span class="card-value highlight-cyan" id="c2-entropy">0.94 (Encrypted C2 Payload)</span></div>
-              <div class="card-row"><span class="card-label">Payload Ratio (In/Out)</span><span class="card-value" id="c2-ratio">In: 1.2 KB | Out: 480 B (Beacon Loop)</span></div>
-              <div class="card-row"><span class="card-label">Jitter Metric</span><span class="card-value highlight-red" id="c2-jitter">9.5% (Rigid / Anomalous)</span></div>
-              <div class="card-row"><span class="card-label">First Seen (Opened)</span><span class="card-value" id="c2-first">2026-11-02 14:10:02 UTC</span></div>
-              <div class="card-row"><span class="card-label">Last Packet Seen</span><span class="card-value" id="c2-last">2026-11-02 14:26:45 UTC</span></div>
-              <div class="card-row"><span class="card-label">Active Duration</span><span class="card-value highlight-cyan" id="c2-duration">16m 43s</span></div>
+              <div class="card-row"><span class="card-label">Beacon State</span><span class="card-value highlight-red" id="c2-state">ACTIVE C2 BEACON (Live Socket)</span></div>
+              <div class="card-row"><span class="card-label">Median IAT & Jitter</span><span class="card-value highlight-red" id="c2-int">8.4s (±0.8s │ 9.5% Jitter)</span></div>
+              <div class="card-row"><span class="card-label">IAT MAD Ratio</span><span class="card-value highlight-red" id="c2-pulse">0.082 (Ultra-Rigid Machine Timer)</span></div>
+              <div class="card-row"><span class="card-label">IQR & Bowley Skew</span><span class="card-value" id="c2-entropy">IQR: 0.120 │ Skew: +0.04 (Symmetric)</span></div>
+              <div class="card-row"><span class="card-label">Burst & Conn Pool</span><span class="card-value" id="c2-bursts">14 bursts / 2m (1.0 conn/burst)</span></div>
+              <div class="card-row"><span class="card-label">Payload Profile</span><span class="card-value" id="c2-payload">512 B Fixed │ In: 1.2 KB / Out: 480 B</span></div>
+              <div class="card-row"><span class="card-label">Session Window</span><span class="card-value" id="c2-first">14:10:02 -&gt; 14:26:45 UTC</span></div>
+              <div class="card-row"><span class="card-label">Active Duration</span><span class="card-value" id="c2-duration">16m 43s (120 Heartbeats)</span></div>
             </div>
+            <span id="c2-ratio" style="display: none;"></span>
+            <span id="c2-jitter" style="display: none;"></span>
+            <span id="c2-last" style="display: none;"></span>
           </div>
 
-          <!-- Card 3 -->
+          <!-- Column 3: MITRE & Containment Controls -->
           <div class="forensic-card">
-            <div class="card-title blue"><span class="card-indicator"></span>FORENSIC & MITIGATION</div>
+            <div class="card-title"><span class="card-indicator"></span>03 / MITRE ATT&CK & CONTAINMENT</div>
             <div class="card-kv-grid">
-              <div class="card-row"><span class="card-label">MITRE ATT&CK</span><span class="card-value" id="c3-mitre">T1071.001 (Web Protocols)</span></div>
-              <div class="card-row"><span class="card-label">Kernel Hook API</span><span class="card-value highlight-cyan">iphlpapi.dll SetTcpEntry</span></div>
-              <div class="card-row"><span class="card-label">Action Status</span><span class="card-value" id="c3-action">Pending Mitigation</span></div>
-              <div class="card-row"><span class="card-label">Socket State</span><span class="card-value" id="c3-stack">ESTABLISHED (Live)</span></div>
+              <div class="card-row"><span class="card-label">MITRE ATT&CK</span><span class="card-value highlight-red" id="c3-mitre">T1071.001 (Web Protocols) + T1573</span></div>
+              <div class="card-row"><span class="card-label">TLS JA4 Fingerprint</span><span class="card-value" id="c3-ja4">t13d1516h2_8daaf4b10222 (Go/Sliver)</span></div>
+              <div class="card-row"><span class="card-label">Tier-1 Action API</span><span class="card-value" style="color: var(--steel);">iphlpapi.dll SetTcpEntry(DELETE_TCB)</span></div>
+              <div class="card-row"><span class="card-label">Tier-2 Contain API</span><span class="card-value">WFP / AdvFirewall Outbound Rule</span></div>
+              <div class="card-row"><span class="card-label">Mitigation Status</span><span class="card-value" id="c3-action">Pending Analyst Response</span></div>
+              <div class="card-row"><span class="card-label">TCP Socket State</span><span class="card-value" id="c3-stack">ESTABLISHED (5-Tuple Verified)</span></div>
             </div>
-            <div style="display: flex; gap: 8px; margin-top: 6px;">
-              <button class="action-btn danger" style="flex: 1;" onclick="severSelectedFlow()" title="Drop active TCP connection">Sever Socket</button>
-              <button class="action-btn tarpit" style="flex: 1;" onclick="tarpitSelectedFlow()" title="Freeze C2 beacon with TCP stall">Tarpit / Ghost</button>
-              <button class="action-btn danger" style="flex: 1; border-color: #dc2626; background: rgba(220, 38, 38, 0.2);" onclick="promptKillTreeModal(stateData.selected_pid, 'Selected Process')" title="Terminate process and all child processes">Kill Tree</button>
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+              <button class="action-btn danger" style="flex: 1; padding: 5px 6px;" onclick="severSelectedFlow()" title="Evict kernel TCB via SetTcpEntry (Drop Socket)">Sever Socket <kbd style="background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.25); color: white;">K</kbd></button>
+              <button class="action-btn tarpit" style="flex: 1; padding: 5px 6px;" onclick="tarpitSelectedFlow()" title="Block binary + C2 IP via Windows Filtering Platform">Firewall Contain</button>
+              <button class="action-btn" style="flex: 1; padding: 5px 6px;" onclick="promptKillTreeModal(stateData.selected_pid, 'Selected Process')" title="Terminate process and child tree">Kill Tree</button>
             </div>
-            <button class="action-btn" id="btn-card3-whitelist" onclick="openWhitelistModalForSelected()" style="width: 100%; margin-top: 6px; border-color: var(--green); color: var(--green); background: rgba(16, 185, 129, 0.08); font-weight: 700;">Resolve False Positive & Whitelist</button>
+            <button class="action-btn" id="btn-card3-whitelist" onclick="openWhitelistModalForSelected()" style="width: 100%; margin-top: 5px; background: #13161e; border-color: #262b38; color: var(--text-dim);">Allowlist & Resolve False Positive <kbd>D</kbd></button>
           </div>
         </div>
       </div>
@@ -1718,61 +1917,61 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
 
   <!-- SURGICAL KERNEL MITIGATION CONFIRMATION MODAL -->
   <div class="modal-overlay" id="sever-confirm-modal">
-    <div class="modal-window" style="border-color: rgba(239, 68, 68, 0.7);">
+    <div class="modal-window" style="border-color: rgba(239, 68, 68, 0.55);">
       <div class="modal-header">
-        <h3 style="color: #ef4444; font-size: 13px;">CONFIRM SURGICAL KERNEL MITIGATION</h3>
+        <h3 style="color: #fca5a5; font-size: 13px;">Confirm Surgical Kernel Socket Eviction</h3>
         <button class="btn-close" onclick="closeSeverModal()">&times;</button>
       </div>
-      <div style="font-size: 12px; color: #cbd5e1; line-height: 1.6;">
-        <p style="margin-bottom: 10px;">You are about to execute a kernel-level TCP Control Block eviction via <code style="color: #38bdf8;">iphlpapi.dll SetTcpEntry(MIB_TCP_STATE_DELETE_TCB)</code>.</p>
-        <div style="background: #020617; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-dim);">Target Socket:</span><strong style="color: #f87171;" id="modal-target-socket">193.26.158.114:443</strong></div>
-          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-dim);">Owning Process:</span><strong style="color: white;" id="modal-target-proc">update.exe (PID 5824)</strong></div>
-          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-dim);">Host Impact:</span><span style="color: #4ade80;">Socket Dropped │ Host Process Persists</span></div>
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+        <p style="margin-bottom: 10px;">You are about to execute an immediate kernel TCP Control Block eviction via <code style="color: var(--steel); font-family: var(--font-mono);">iphlpapi.dll SetTcpEntry(MIB_TCP_STATE_DELETE_TCB)</code>.</p>
+        <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono);">
+          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Target Socket:</span><strong style="color: #fca5a5;" id="modal-target-socket">193.26.158.114:443</strong></div>
+          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Owning Process:</span><strong style="color: var(--text-main);" id="modal-target-proc">update.exe (PID 5824)</strong></div>
+          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Operational Impact:</span><span style="color: #6ee7b7;">Active TCP Session Dropped │ Host OS & Process Persist</span></div>
         </div>
-        <p style="font-size: 11px; color: #94a3b8;">This operation immediately severs the C2 session while leaving the host operating system stable.</p>
+        <p style="font-size: 11px; color: var(--text-muted);">Note: Dropping a single TCP socket severs the active command stream. To block automatic C2 reconnection callbacks, pair with <strong>Firewall Contain</strong>.</p>
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
-        <button class="action-btn" onclick="closeSeverModal()">Cancel [ESC]</button>
-        <button class="action-btn danger" onclick="executeConfirmedSever()">Confirm & Sever Socket [Enter]</button>
+        <button class="action-btn" onclick="closeSeverModal()">Cancel <kbd>ESC</kbd></button>
+        <button class="action-btn danger" onclick="executeConfirmedSever()">Confirm & Evict TCB <kbd style="background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.25); color: white;">Enter</kbd></button>
       </div>
     </div>
   </div>
 
-  <!-- TARPIT / GHOST SOCKET DECEPTIVE DEFENSE MODAL -->
+  <!-- WFP / ADVFIREWALL CONTAINMENT MODAL -->
   <div class="modal-overlay" id="tarpit-confirm-modal">
-    <div class="modal-window" style="border-color: #a855f7;">
+    <div class="modal-window">
       <div class="modal-header">
-        <h3 style="color: #c084fc; font-size: 13px;">ENFORCE TARPIT / GHOST SOCKET (DECEPTIVE DEFENSE)</h3>
+        <h3 style="color: var(--text-main); font-size: 13px;">Enforce WFP / AdvFirewall Persistent Containment</h3>
         <button class="btn-close" onclick="closeTarpitModal()">&times;</button>
       </div>
-      <div style="font-size: 12px; color: #cbd5e1; line-height: 1.6;">
-        <p style="margin-bottom: 10px;">Instead of dropping the connection (which alerts the C2 operator), you are about to enforce a <strong>TCP Zero-Window Tarpit</strong>.</p>
-        <div style="background: #020617; border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-dim);">Target Socket:</span><strong style="color: #c084fc;" id="tarpit-modal-target">193.26.158.114:443</strong></div>
-          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-dim);">Owning Process:</span><strong style="color: white;" id="tarpit-modal-proc">update.exe (PID 5824)</strong></div>
-          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-dim);">Deception Strategy:</span><span style="color: #c084fc;">TCP Window Size = 0 (Stall Implant)</span></div>
+      <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+        <p style="margin-bottom: 10px;">To prevent the C2 implant from respawning a fresh ephemeral TCP socket after eviction, enforce a <strong>Windows Filtering Platform Outbound Block Rule</strong> scoped to the binary path and remote C2 IP.</p>
+        <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono);">
+          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Remote C2 Endpoint:</span><strong style="color: #fcd34d;" id="tarpit-modal-target">193.26.158.114:443</strong></div>
+          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Scoped Binary & PID:</span><strong style="color: var(--text-main);" id="tarpit-modal-proc">update.exe (PID 5824)</strong></div>
+          <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Containment Policy:</span><span style="color: var(--text-dim);">Block Outbound Binary + C2 IP (Process Left Alive for RAM Dump)</span></div>
         </div>
-        <p style="font-size: 11px; color: #94a3b8;">The malware freezes waiting for TCP buffer space, buying time to extract volatile RAM artifacts before the attacker realizes they are trapped.</p>
+        <p style="font-size: 11px; color: var(--text-muted);">The process remains inspectable for volatile memory acquisition while outbound callbacks are blocked at the host firewall layer.</p>
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
-        <button class="action-btn" onclick="closeTarpitModal()">Cancel [ESC]</button>
-        <button class="action-btn tarpit" onclick="executeConfirmedTarpit()">Confirm Tarpit Quarantine [Enter]</button>
+        <button class="action-btn" onclick="closeTarpitModal()">Cancel <kbd>ESC</kbd></button>
+        <button class="action-btn danger" onclick="executeConfirmedTarpit()">Enforce Firewall Containment <kbd style="background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.25); color: white;">Enter</kbd></button>
       </div>
     </div>
   </div>
 
   <!-- STIX 2.1 THREAT INTEL EXPORT MODAL -->
   <div class="modal-overlay" id="stix-export-modal">
-    <div class="modal-window" style="max-width: 650px; border-color: rgba(56, 189, 248, 0.6);">
+    <div class="modal-window" style="max-width: 650px;">
       <div class="modal-header">
-        <h3 style="color: var(--cyan); font-size: 13px;">STIX 2.1 THREAT INTEL BUNDLE</h3>
+        <h3 style="color: var(--text-main); font-size: 13px;">STIX 2.1 Threat Intel Bundle</h3>
         <button class="btn-close" onclick="closeStixModal()">&times;</button>
       </div>
       <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 8px;">
         OASIS Open CTI STIX 2.1 bundle formatted for ingestion into MISP, OpenCTI, and ThreatConnect.
       </div>
-      <pre id="stix-json-preview" style="background: #020617; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 10px; color: #a5f3fc; max-height: 280px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4;"></pre>
+      <pre id="stix-json-preview" style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--steel); max-height: 280px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4;"></pre>
       <div style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;">
         <button class="action-btn" onclick="copyStixToClipboard()">Copy JSON</button>
         <button class="action-btn danger" onclick="downloadStixBundle()">Download STIX 2.1 (.json)</button>
@@ -1782,18 +1981,18 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
 
   <!-- YARA-L DETECTION RULE MODAL -->
   <div class="modal-overlay" id="yaral-export-modal">
-    <div class="modal-window" style="max-width: 650px; border-color: rgba(245, 158, 11, 0.6);">
+    <div class="modal-window" style="max-width: 650px;">
       <div class="modal-header">
-        <h3 style="color: #f59e0b; font-size: 13px;">GOOGLE CHRONICLE YARA-L 2.0 DETECTION RULE</h3>
+        <h3 style="color: var(--text-main); font-size: 13px;">Google Chronicle YARA-L 2.0 Detection Rule</h3>
         <button class="btn-close" onclick="closeYaralModal()">&times;</button>
       </div>
       <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 8px;">
         Compiled Detection-as-Code rule for real-time UDM event stream hunting across Google Chronicle SIEM.
       </div>
-      <pre id="yaral-code-preview" style="background: #020617; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: var(--font-mono); font-size: 10.5px; color: #fde68a; max-height: 280px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4;"></pre>
+      <pre id="yaral-code-preview" style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px; font-family: var(--font-mono); font-size: 10.5px; color: #fde68a; max-height: 280px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4;"></pre>
       <div style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px;">
         <button class="action-btn" onclick="copyYaralToClipboard()">Copy YARA-L Rule</button>
-        <button class="action-btn" style="border-color: #f59e0b; color: #f59e0b;" onclick="deployYaralToChronicle()">Push to Chronicle SIEM Pipeline</button>
+        <button class="action-btn" onclick="deployYaralToChronicle()">Push to Chronicle SIEM Pipeline</button>
       </div>
     </div>
   </div>
@@ -1802,10 +2001,10 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
   <div class="modal-overlay" id="dossier-modal">
     <div class="modal-window">
       <div class="modal-header">
-        <h3 id="modal-dossier-title">PROCESS FORENSIC DOSSIER</h3>
+        <h3 id="modal-dossier-title">Process Forensic Dossier</h3>
         <button class="btn-close" onclick="closeDossierModal()">&times;</button>
       </div>
-      <div class="dossier-body" id="modal-dossier-body" style="font-size: 11px; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+      <div class="dossier-body" id="modal-dossier-body" style="font-size: 11.5px; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
       </div>
       <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
         <button class="action-btn" onclick="closeDossierModal()">Close</button>
@@ -1818,29 +2017,29 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     <div class="modal-window" style="width: 1080px; max-width: 95vw; max-height: 90vh;">
       <div class="modal-header" style="justify-content: space-between;">
         <div>
-          <span class="modal-title" style="color: var(--cyan); font-size: 14px;">PID NETWORK & INTERNET USAGE AUDIT</span>
-          <span style="color: var(--text-dim); margin-left: 10px; font-size: 12px;">PID <strong id="ph-pid" style="color: white;">-</strong> (<span id="ph-proc" style="color: var(--cyan); font-weight: 700;">-</span>) on <strong id="ph-host" style="color: white;">-</strong></span>
+          <span class="modal-title" style="color: var(--text-main); font-size: 13.5px; font-weight: 600;">PID Network & Internet Usage Audit</span>
+          <span style="color: var(--text-dim); margin-left: 10px; font-size: 12px;">PID <strong id="ph-pid" style="color: var(--text-main); font-family: var(--font-mono);">-</strong> (<span id="ph-proc" style="color: var(--steel); font-weight: 600; font-family: var(--font-mono);">-</span>) on <strong id="ph-host" style="color: var(--text-main); font-family: var(--font-mono);">-</strong></span>
         </div>
-        <button class="action-btn" onclick="closePidHistoryModal()" style="padding: 2px 8px; font-weight: 700;">X</button>
+        <button class="action-btn" onclick="closePidHistoryModal()" style="padding: 2px 8px;">X</button>
       </div>
 
-      <!-- 4 High-Impact Summary Cards -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0;">
-        <div class="forensic-card" style="padding: 10px 12px;">
-          <div class="card-label" style="font-size: 9.5px; color: var(--text-dim);">FIRST SEEN (UTC)</div>
-          <div class="card-value" id="ph-first-seen" style="font-size: 11px; margin-top: 4px; color: white;">-</div>
+      <!-- 4 Summary Cells -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 10px 0;">
+        <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px;">
+          <div class="card-label" style="font-size: 9.5px;">FIRST SEEN (UTC)</div>
+          <div class="card-value" id="ph-first-seen" style="font-size: 11px; margin-top: 4px; text-align: left;">-</div>
         </div>
-        <div class="forensic-card" style="padding: 10px 12px;">
-          <div class="card-label" style="font-size: 9.5px; color: var(--text-dim);">LAST ACTIVE (UTC)</div>
-          <div class="card-value" id="ph-last-seen" style="font-size: 11px; margin-top: 4px; color: white;">-</div>
+        <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px;">
+          <div class="card-label" style="font-size: 9.5px;">LAST ACTIVE (UTC)</div>
+          <div class="card-value" id="ph-last-seen" style="font-size: 11px; margin-top: 4px; text-align: left;">-</div>
         </div>
-        <div class="forensic-card" style="padding: 10px 12px;">
-          <div class="card-label" style="font-size: 9.5px; color: var(--text-dim);">TOTAL BANDWIDTH USAGE</div>
-          <div class="card-value highlight-cyan" id="ph-bandwidth" style="font-size: 13px; margin-top: 4px; font-weight: 700;">-</div>
+        <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px;">
+          <div class="card-label" style="font-size: 9.5px;">TOTAL BANDWIDTH USAGE</div>
+          <div class="card-value highlight-cyan" id="ph-bandwidth" style="font-size: 13px; margin-top: 4px; text-align: left;">-</div>
         </div>
-        <div class="forensic-card" style="padding: 10px 12px;">
-          <div class="card-label" style="font-size: 9.5px; color: var(--text-dim);">SOCKETS (TOTAL / LIVE)</div>
-          <div class="card-value" id="ph-sockets" style="font-size: 13px; margin-top: 4px; font-weight: 700; color: white;">-</div>
+        <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px;">
+          <div class="card-label" style="font-size: 9.5px;">SOCKETS (TOTAL / LIVE)</div>
+          <div class="card-value" id="ph-sockets" style="font-size: 13px; margin-top: 4px; text-align: left;">-</div>
         </div>
       </div>
 
@@ -1864,111 +2063,111 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         </table>
       </div>
 
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--border);">
-        <button class="action-btn" onclick="exportCurrentPidCsv()" style="font-weight: 700;">Export PID History (CSV)</button>
-        <button class="action-btn" style="background: #334155; color: white;" onclick="closePidHistoryModal()">Close (Esc)</button>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border);">
+        <button class="action-btn" onclick="exportCurrentPidCsv()">Export PID History (.csv)</button>
+        <button class="action-btn" onclick="closePidHistoryModal()">Close <kbd>Esc</kbd></button>
       </div>
     </div>
   </div>
   <!-- ENTERPRISE FALSE POSITIVE & WHITELIST POLICY MODAL -->
   <div class="modal-overlay" id="whitelist-modal" onclick="if(event.target === this) closeWhitelistModal()">
-    <div class="modal-window" style="width: 720px; max-width: 95vw; border-color: var(--green); box-shadow: 0 0 35px rgba(16, 185, 129, 0.25);">
+    <div class="modal-window" style="width: 720px; max-width: 95vw;">
       <div class="modal-header">
         <div>
-          <span class="modal-title" style="color: var(--green); font-size: 13.5px; font-weight: 800;">RESOLVE FALSE POSITIVE & WHITELIST POLICY</span>
+          <span class="modal-title" style="color: var(--text-main); font-size: 13.5px; font-weight: 600;">Resolve False Positive & Allowlist Policy</span>
           <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
-            Exempt verified business software from beacon heuristics and reverse connection blocking.
+            Exempt verified enterprise software from statistical beacon scoring and reverse containment rules.
           </div>
         </div>
-        <button class="action-btn" onclick="closeWhitelistModal()" style="padding: 2px 8px; font-weight: 700;">X</button>
+        <button class="action-btn" onclick="closeWhitelistModal()" style="padding: 2px 8px;">X</button>
       </div>
 
       <!-- Incident Context Summary -->
-      <div style="background: #040711; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 12px 0; display: flex; flex-direction: column; gap: 6px;">
+      <div style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px;">
         <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-dim); font-size: 11px;">Target Host:</span>
-          <strong style="color: white; font-size: 11px;" id="wl-host">WIN-PROD-SRV01 (10.0.1.15)</strong>
+          <span style="color: var(--text-muted); font-size: 11px;">Target Host:</span>
+          <strong style="color: var(--text-main); font-size: 11px; font-family: var(--font-mono);" id="wl-host">WIN-PROD-SRV01 (10.0.1.15)</strong>
         </div>
         <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-dim); font-size: 11px;">Process & Binary:</span>
-          <strong style="color: var(--cyan); font-size: 11px;" id="wl-process">update.exe (PID 5824)</strong>
+          <span style="color: var(--text-muted); font-size: 11px;">Process & Binary:</span>
+          <strong style="color: var(--steel); font-size: 11px; font-family: var(--font-mono);" id="wl-process">update.exe (PID 5824)</strong>
         </div>
         <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-dim); font-size: 11px;">Destination Socket:</span>
-          <strong style="color: white; font-size: 11px;" id="wl-dest">193.26.158.114:443 (Raw IP / No SNI)</strong>
+          <span style="color: var(--text-muted); font-size: 11px;">Destination Socket:</span>
+          <strong style="color: var(--text-main); font-size: 11px; font-family: var(--font-mono);" id="wl-dest">193.26.158.114:443 (Raw IP / No SNI)</strong>
         </div>
         <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-dim); font-size: 11px;">Trigger Heuristic:</span>
-          <span style="color: #f87171; font-size: 11px; font-weight: 700;" id="wl-trigger">Rigid 8.4s Cadence (9.5% Jitter) - Sliver C2 Rule</span>
+          <span style="color: var(--text-muted); font-size: 11px;">Trigger Heuristic:</span>
+          <span style="color: #fca5a5; font-size: 11px; font-weight: 600;" id="wl-trigger">IAT MAD 0.082 │ 8.4s Cadence (9.5% Jitter) - Sliver C2 Rule</span>
         </div>
         <div style="display: flex; justify-content: space-between;">
-          <span style="color: var(--text-dim); font-size: 11px;">Current Enforcement:</span>
+          <span style="color: var(--text-muted); font-size: 11px;">Current Enforcement:</span>
           <span class="host-pill crit" style="font-size: 9.5px;" id="wl-block-state">SEVERED (Kernel SetTcpEntry)</span>
         </div>
       </div>
 
       <!-- 1. Policy Scope Selector (Local vs Global) -->
-      <div style="margin-bottom: 12px;">
-        <label style="display: block; font-size: 11px; font-weight: 800; color: white; margin-bottom: 6px; letter-spacing: 0.5px;">
-          1. SELECT POLICY SCOPE:
+      <div style="margin-bottom: 10px;">
+        <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 0.03em; text-transform: uppercase;">
+          1. Policy Scope
         </label>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div id="wl-scope-local-box" onclick="setWhitelistScope('LOCAL')" style="background: #0d1527; border: 1px solid var(--cyan); border-radius: 6px; padding: 10px; cursor: pointer;">
+          <div id="wl-scope-local-box" onclick="setWhitelistScope('LOCAL')" style="background: #141720; border: 1px solid #3f4658; border-radius: 5px; padding: 10px; cursor: pointer;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <input type="radio" id="wl-scope-local" name="wl_scope" value="LOCAL" checked>
-              <strong style="color: var(--cyan); font-size: 11.5px;">LOCAL SCOPE (Current Host Only)</strong>
+              <strong style="color: var(--text-main); font-size: 11.5px;">Local Scope (Current Host Only)</strong>
             </div>
-            <div style="color: var(--text-dim); font-size: 10px; margin-top: 4px; line-height: 1.4;">
-              Exempt only on <span id="wl-scope-hostname">WIN-PROD-SRV01</span>. Recommended for developer testing and local admin scripts.
+            <div style="color: var(--text-dim); font-size: 10.5px; margin-top: 4px; line-height: 1.4;">
+              Exempt only on <span id="wl-scope-hostname" style="font-family: var(--font-mono);">WIN-PROD-SRV01</span>. Recommended for developer testing and local scripts.
             </div>
           </div>
 
-          <div id="wl-scope-global-box" onclick="setWhitelistScope('GLOBAL')" style="background: #040711; border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer;">
+          <div id="wl-scope-global-box" onclick="setWhitelistScope('GLOBAL')" style="background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px; cursor: pointer;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <input type="radio" id="wl-scope-global" name="wl_scope" value="GLOBAL">
-              <strong style="color: white; font-size: 11.5px;">GLOBAL ENTERPRISE (All 32+ Hosts)</strong>
+              <strong style="color: var(--text-main); font-size: 11.5px;">Global Enterprise (All 32 Hosts)</strong>
             </div>
-            <div style="color: var(--text-dim); font-size: 10px; margin-top: 4px; line-height: 1.4;">
-              Pushes whitelist rule fleet-wide. Recommended for verified vendor SaaS, IT management daemons, and backup agents.
+            <div style="color: var(--text-dim); font-size: 10.5px; margin-top: 4px; line-height: 1.4;">
+              Pushes allowlist rule fleet-wide for verified vendor SaaS, management daemons, and backup agents.
             </div>
           </div>
         </div>
       </div>
 
       <!-- 2. Fingerprint & Match Criteria -->
-      <div style="margin-bottom: 12px;">
-        <label style="display: block; font-size: 11px; font-weight: 800; color: white; margin-bottom: 6px; letter-spacing: 0.5px;">
-          2. RULE MATCHING CRITERIA:
+      <div style="margin-bottom: 10px;">
+        <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 0.03em; text-transform: uppercase;">
+          2. Matching Criteria
         </label>
-        <div style="display: flex; flex-direction: column; gap: 6px; background: #040711; border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 6px; background: #0c0e13; border: 1px solid var(--border); border-radius: 5px; padding: 10px;">
           <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); cursor: pointer;">
             <input type="checkbox" id="wl-match-hash" checked>
-            <span>Match Binary SHA-256 Hash (<code style="color: #cbd5e1; font-size: 10px;">e3b0c44298fc1c14..</code>)</span>
+            <span>Match Binary SHA-256 Hash (<code style="color: var(--text-main); font-size: 10px; font-family: var(--font-mono);">a4f982d17c63e019..8374</code>)</span>
           </label>
           <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); cursor: pointer;">
             <input type="checkbox" id="wl-match-dest" checked>
-            <span>Match Destination Socket IP / Domain (<code style="color: #cbd5e1; font-size: 10px;" id="wl-rule-dest">193.26.158.114:443</code>)</span>
+            <span>Match Destination Socket IP / Domain (<code style="color: var(--text-main); font-size: 10px; font-family: var(--font-mono);" id="wl-rule-dest">193.26.158.114:443</code>)</span>
           </label>
           <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-dim); cursor: pointer;">
             <input type="checkbox" id="wl-match-ja4" checked>
-            <span>Match TLS JA4 Client Hello Signature (<code style="color: #cbd5e1; font-size: 10px;">t13d1516h2_8daaf4b10222..</code>)</span>
+            <span>Match TLS JA4 Client Hello Signature (<code style="color: var(--text-main); font-size: 10px; font-family: var(--font-mono);">t13d1516h2_8daaf4b10222..</code>)</span>
           </label>
         </div>
       </div>
 
       <!-- 3. SOC Audit Note -->
-      <div style="margin-bottom: 14px;">
-        <label style="display: block; font-size: 11px; font-weight: 800; color: white; margin-bottom: 6px; letter-spacing: 0.5px;">
-          3. SOC AUDIT JUSTIFICATION & TICKET ID:
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-size: 11px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 0.03em; text-transform: uppercase;">
+          3. SOC Audit Justification & Ticket ID
         </label>
         <input type="text" class="search-box" id="wl-reason" placeholder="e.g. Approved vendor telemetry daemon / JIRA-8924 verification" style="width: 100%; font-size: 11px;" value="Approved enterprise vendor telemetry - verified benign by SOC">
       </div>
 
       <!-- Footer Buttons -->
-      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 12px;">
+      <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px;">
         <button class="action-btn" onclick="closeWhitelistModal()">Cancel</button>
-        <button class="action-btn" onclick="applyWhitelistPolicy()" style="background: var(--green); color: black; font-weight: 800; border-color: var(--green); padding: 6px 16px;">
-          Confirm Whitelist & Reverse Block
+        <button class="action-btn" onclick="applyWhitelistPolicy()" style="background: #10b981; color: #052e16; font-weight: 600; border-color: #10b981; padding: 5px 14px;">
+          Confirm Allowlist & Restore Traffic
         </button>
       </div>
     </div>
@@ -1977,10 +2176,16 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
 
   <!-- FOOTER -->
   <footer>
-    <div>
-      Shortcuts: <strong style="color: white;">[1]</strong> Fleet Matrix │ <strong style="color: white;">[2]</strong> Campaigns │ <strong style="color: white;">[3]</strong> Drill-Down (Subtabs: <strong style="color: white;">A</strong> Sockets, <strong style="color: white;">B</strong> Procs, <strong style="color: white;">C</strong> Timeline) │ <strong style="color: white;">K</strong> Sever │ <strong style="color: white;">Alt+Z</strong> Density
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span><kbd>1</kbd> Fleet</span>
+      <span><kbd>2</kbd> Campaigns</span>
+      <span><kbd>3</kbd> Investigation (<kbd>A</kbd> Sockets, <kbd>B</kbd> Procs, <kbd>C</kbd> Timeline, <kbd>D</kbd> Allowlist)</span>
+      <span><kbd>K</kbd> Sever</span>
+      <span><kbd>I</kbd> Dossier</span>
+      <span><kbd>E</kbd> Export</span>
+      <span><kbd>Alt+Z</kbd> Density</span>
     </div>
-    <div>UNCLOAK v0.1.0 │ Statistical Beacon Detection & Kernel Socket Attribution Engine</div>
+    <div style="font-family: var(--font-mono); font-size: 10.5px;">Uncloak v0.2.0 │ Central SOC Threat Hunting & Kernel Socket Attribution</div>
   </footer>
 
 <script>
@@ -2057,15 +2262,15 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const radioGlobal = document.getElementById('wl-scope-global');
 
     if (scope === 'GLOBAL') {
-      globalBox.style.background = '#0d1527';
-      globalBox.style.borderColor = 'var(--cyan)';
-      localBox.style.background = '#040711';
+      globalBox.style.background = '#171c26';
+      globalBox.style.borderColor = '#4b5563';
+      localBox.style.background = '#0c0e13';
       localBox.style.borderColor = 'var(--border)';
       if (radioGlobal) radioGlobal.checked = true;
     } else {
-      localBox.style.background = '#0d1527';
-      localBox.style.borderColor = 'var(--cyan)';
-      globalBox.style.background = '#040711';
+      localBox.style.background = '#171c26';
+      localBox.style.borderColor = '#4b5563';
+      globalBox.style.background = '#0c0e13';
       globalBox.style.borderColor = 'var(--border)';
       if (radioLocal) radioLocal.checked = true;
     }
@@ -2125,9 +2330,9 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       const isGlobal = r.scope === 'GLOBAL';
       rows += `
         <tr>
-          <td><strong style="color: var(--cyan);">${r.rule_id}</strong></td>
-          <td><span class="host-pill arch" style="font-size: 9px; border-color: ${isGlobal ? 'var(--cyan)' : 'var(--purple)'}; color: ${isGlobal ? 'var(--cyan)' : '#d8b4fe'};">${isGlobal ? 'GLOBAL (All 32 Hosts)' : 'LOCAL (Target Host)'}</span></td>
-          <td><strong>${r.entity}</strong></td>
+          <td><strong style="color: var(--text-main); font-weight: 600;">${r.rule_id}</strong></td>
+          <td><span class="host-pill arch" style="font-size: 9.5px; color: ${isGlobal ? 'var(--steel)' : 'var(--text-dim)'}; border-color: ${isGlobal ? 'rgba(147, 197, 253, 0.35)' : '#2b303e'};">${isGlobal ? 'GLOBAL (All 32 Hosts)' : 'LOCAL (Target Host)'}</span></td>
+          <td><strong style="color: var(--text-main); font-weight: 500;">${r.entity}</strong></td>
           <td style="font-size: 10.5px; color: var(--text-dim);">${r.destination}</td>
           <td style="font-size: 11px;">${r.justification}</td>
           <td style="font-size: 10.5px; color: var(--text-dim);">${r.created_at}</td>
@@ -2236,22 +2441,22 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       rowsHtml += `
         <tr class="${isCrit ? 'row-threat' : ''} ${isIso ? 'row-isolated' : ''}" style="cursor: pointer;" onclick="selectAndDrilldown('${h.host_id}')">
           <td style="white-space: nowrap;">
-            <span class="live-dot ${isMuted ? 'muted' : (isCrit ? 'pulsing' : '')}" style="margin-right: 6px;"></span>
-            <span class="host-pill ${isMuted ? 'muted' : (isIso ? 'high' : pillClass)}" style="font-size: 9px; padding: 1px 5px;">
-              ${isIso ? 'ISOLATED' : (isMuted ? 'STALE' : h.threat_level)}
-            </span>
+            <span class="live-dot ${isMuted ? 'muted' : (isCrit ? 'pulsing' : (isHigh ? 'high-dot' : ''))}" style="margin-right: 6px;"></span>
+            ${(isCrit || isHigh || isEval || isMuted || isIso)
+              ? `<span class="host-pill ${isMuted ? 'muted' : (isIso ? 'high' : pillClass)}" style="font-size: 9.5px; padding: 1px 5px;">${isIso ? 'ISOLATED' : (isMuted ? 'STALE' : h.threat_level)}</span>`
+              : `<span class="host-quiet-score">Nominal</span>`}
           </td>
-          <td><strong style="color: var(--cyan);">${h.hostname}</strong></td>
-          <td style="font-family: monospace; font-size: 11px;">${h.ip_address}</td>
+          <td><strong style="color: var(--text-main); font-weight: 600;">${h.hostname}</strong></td>
+          <td style="font-size: 11px;">${h.ip_address}</td>
           <td><span class="host-pill arch">${h.ad_tier || h.subnet}</span></td>
           <td style="font-size: 11px; color: var(--text-dim);">${h.os_version}</td>
           <td><strong>${h.active_sockets_count}</strong></td>
-          <td style="font-size: 11px;">${h.cpu_percent}% / ${h.ram_mb} MB</td>
-          <td style="text-align: right;"><strong style="color: ${isCrit ? '#f87171' : (isHigh ? '#fbbf24' : 'var(--green)')};">${(h.threat_score * 100).toFixed(1)}%</strong></td>
-          <td>${h.c2_framework ? `<span style="color: #f87171; font-weight: 700;">${h.c2_framework}</span>` : '<span style="color: var(--text-muted); font-size: 11px;">Baseline Clean</span>'}</td>
-          <td style="font-size: 10px; color: var(--text-dim);">${staleText}</td>
+          <td style="font-size: 11px; color: var(--text-dim);">${h.cpu_percent}% / ${h.ram_mb} MB</td>
+          <td style="text-align: right;"><strong style="color: ${isCrit ? '#fca5a5' : (isHigh ? '#fcd34d' : 'var(--text-dim)')}; font-weight: 600;">${(h.threat_score * 100).toFixed(1)}%</strong></td>
+          <td>${h.c2_framework ? `<span style="color: #fca5a5; font-weight: 600;">${h.c2_framework}</span>` : '<span style="color: var(--text-muted); font-size: 11px;">Nominal</span>'}</td>
+          <td style="font-size: 10.5px; color: var(--text-dim);">${staleText}</td>
           <td style="text-align: center; white-space: nowrap;">
-            <button class="action-btn" onclick="event.stopPropagation(); selectAndDrilldown('${h.host_id}')" style="padding: 2px 7px; margin-right: 4px;">Investigate</button>
+            <button class="action-btn" onclick="event.stopPropagation(); selectAndDrilldown('${h.host_id}')" style="padding: 2px 7px; margin-right: 4px;">Inspect</button>
             <button class="action-btn ${isIso ? '' : 'danger'}" onclick="event.stopPropagation(); toggleHostIsolation('${h.host_id}')" style="padding: 2px 7px;">${isIso ? 'Re-Join' : 'Isolate'}</button>
           </td>
         </tr>
@@ -2372,7 +2577,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const healthLabel = document.getElementById('agent-health-label');
     if (healthLabel) {
       healthLabel.innerText = stateData.fleet_summary.heartbeat_status;
-      healthLabel.style.color = stateData.fleet_summary.muted_hosts > 0 ? '#f59e0b' : 'var(--green)';
+      healthLabel.style.color = stateData.fleet_summary.muted_hosts > 0 ? '#f59e0b' : 'var(--text-dim)';
     }
 
     // 2. Render Fleet Matrix
@@ -2402,24 +2607,89 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     renderHostDrilldown();
   }
 
+  let activeGridSeverityFilter = 'ALL';
+
+  function setGridSeverityFilter(filterType) {
+    activeGridSeverityFilter = filterType;
+    const map = { 'ALL': 'grid-sev-all', 'THREATS': 'grid-sev-threats', 'EVALUATING': 'grid-sev-eval', 'HEALTHY': 'grid-sev-healthy', 'MUTED': 'grid-sev-muted' };
+    Object.values(map).forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) btn.classList.remove('active');
+    });
+    const activeBtn = document.getElementById(map[filterType] || 'grid-sev-all');
+    if (activeBtn) activeBtn.classList.add('active');
+    renderFleetSubnets();
+  }
+
+  function formatCleanOs(osStr) {
+    if (!osStr) return 'Windows Server 2022';
+    return osStr.replace(' (x64)', '').replace('Enterprise', 'Ent');
+  }
+
   function renderFleetSubnets() {
     const container = document.getElementById('fleet-subnets-container');
-    const hosts = stateData.hosts;
+    const ribbon = document.getElementById('priority-incident-ribbon');
+    const hosts = stateData.hosts || [];
+
+    // 1. Render Priority Incident Queue Ribbon (All CRITICAL & HIGH hosts pinned above fold)
+    if (ribbon) {
+      const threatHosts = hosts.filter(h => h.threat_level === 'CRITICAL' || h.threat_level === 'HIGH');
+      if (threatHosts.length > 0) {
+        ribbon.style.display = 'flex';
+        let rHtml = `<span class="priority-ribbon-label"><span class="live-dot pulsing"></span>Incident Queue (${threatHosts.length})</span>`;
+        threatHosts.forEach(th => {
+          const isCrit = th.threat_level === 'CRITICAL';
+          const rawC2 = (th.c2_framework || 'Active C2').replace('Active Beacon: ', '').split('(')[0].trim();
+          const shortC2 = rawC2.includes('Sliver') ? 'Sliver C2' : (rawC2.includes('Cobalt') ? 'Cobalt Strike' : (rawC2.includes('Lateral') ? 'Lateral Pivot' : rawC2));
+          rHtml += `
+            <div class="priority-chip ${isCrit ? '' : 'high-chip'}" onclick="selectAndDrilldown('${th.host_id}')" title="Investigate ${th.hostname} (${th.ip_address})">
+              <span class="host-pill ${isCrit ? 'crit' : 'high'}" style="font-size: 9px; padding: 1px 5px;">${th.threat_level} ${(th.threat_score * 100).toFixed(1)}%</span>
+              <strong style="color: var(--text-main); font-weight: 600;">${th.hostname}</strong>
+              <span style="color: var(--text-muted);">${th.ip_address}</span>
+              <span style="color: ${isCrit ? '#fca5a5' : '#fcd34d'}; font-weight: 500; margin-left: auto;">-> ${shortC2}</span>
+            </div>
+          `;
+        });
+        if (ribbon.dataset.renderedHtml !== rHtml) {
+          ribbon.innerHTML = rHtml;
+          ribbon.dataset.renderedHtml = rHtml;
+        }
+      } else {
+        ribbon.style.display = 'none';
+      }
+    }
+
+    // 2. Filter hosts according to activeGridSeverityFilter
+    const filteredHosts = hosts.filter(h => {
+      if (activeGridSeverityFilter === 'THREATS') return h.threat_level === 'CRITICAL' || h.threat_level === 'HIGH';
+      if (activeGridSeverityFilter === 'EVALUATING') return h.threat_level === 'EVALUATING';
+      if (activeGridSeverityFilter === 'HEALTHY') return h.threat_level === 'HEALTHY' && h.status !== 'MUTED';
+      if (activeGridSeverityFilter === 'MUTED') return h.status === 'MUTED';
+      return true;
+    });
     
     // Group hosts by subnet
     const groups = {};
-    hosts.forEach(h => {
+    filteredHosts.forEach(h => {
       if (!groups[h.subnet]) groups[h.subnet] = [];
       groups[h.subnet].push(h);
     });
 
     let html = '';
     for (const [subnet, subnetHosts] of Object.entries(groups)) {
+      const subnetThreats = subnetHosts.filter(x => x.threat_level === 'CRITICAL' || x.threat_level === 'HIGH').length;
+      const subnetBadge = subnetThreats > 0
+        ? `<span class="host-pill crit" style="font-size: 9.5px;">${subnetThreats} Active Threat${subnetThreats > 1 ? 's' : ''}</span>`
+        : `<span class="host-quiet-score">Nominal</span>`;
+
       html += `
         <div class="subnet-group">
           <div class="subnet-title">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="var(--cyan)"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
-            ${subnet.toUpperCase()} (${subnetHosts.length} ENDPOINTS)
+            <span style="display: inline-flex; align-items: center; gap: 7px;">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="var(--text-muted)"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+              <span>${subnet} (${subnetHosts.length} Endpoints)</span>
+            </span>
+            ${subnetBadge}
           </div>
           <div class="host-grid">
       `;
@@ -2428,27 +2698,41 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         const isCrit = h.threat_level === 'CRITICAL';
         const isHigh = h.threat_level === 'HIGH';
         const isEval = h.threat_level === 'EVALUATING';
-        const pillClass = isCrit ? 'crit' : (isHigh ? 'high' : (isEval ? 'eval' : 'safe'));
-
         const isMuted = h.status === 'MUTED';
+        const pillClass = isCrit ? 'crit' : (isHigh ? 'high' : (isEval ? 'eval' : 'safe'));
+        const cardStateClass = isCrit ? 'critical' : (isHigh ? 'high' : (isEval ? 'eval' : ''));
+        const dotClass = isMuted ? 'muted' : (isCrit ? 'pulsing' : (isHigh ? 'high-dot' : (isEval ? 'eval-dot' : '')));
+
+        let statusTagHtml = `<span class="host-quiet-score">Nominal &middot; ${(h.threat_score * 100).toFixed(1)}%</span>`;
+        if (isMuted) {
+          statusTagHtml = `<span class="host-pill muted">STALE</span>`;
+        } else if (isCrit || isHigh || isEval) {
+          statusTagHtml = `<span class="host-pill ${pillClass}">${h.threat_level} &middot; ${(h.threat_score * 100).toFixed(1)}%</span>`;
+        }
+
+        let c2BannerText = '';
+        if (h.c2_framework) {
+          c2BannerText = h.c2_framework.replace(/^Active Beacon:\\s*/i, '');
+        }
+
         html += `
-          <div class="host-card ${isCrit ? 'critical' : ''} ${isMuted ? 'muted' : ''}" onclick="selectAndDrilldown('${h.host_id}')">
+          <div class="host-card ${cardStateClass} ${isMuted ? 'muted' : ''}" onclick="selectAndDrilldown('${h.host_id}')">
             <div class="host-card-top">
               <span class="host-name">
-                <span class="live-dot ${isMuted ? 'muted' : (isCrit ? 'pulsing' : '')}"></span>
+                <span class="live-dot ${dotClass}"></span>
                 ${h.hostname}
               </span>
-              <span class="host-pill ${isMuted ? 'muted' : pillClass}">${isMuted ? 'DISCONNECTED' : h.threat_level} (${isMuted ? 'Stale' : (h.threat_score * 100).toFixed(1) + '%'})</span>
+              ${statusTagHtml}
             </div>
             <div class="host-meta">
-              <span>${h.ip_address}</span>
-              <span>${h.os_version.split(' ')[0]} ${h.os_version.split(' ')[1] || ''}</span>
+              <span class="host-ip">${h.ip_address}</span>
+              <span class="host-os">${formatCleanOs(h.os_version)}</span>
             </div>
             <div class="host-meta" style="margin-top: 2px;">
-              <span>${h.active_sockets_count} Sockets</span>
-              <span>CPU: ${h.cpu_percent}% │ RAM: ${h.ram_mb} MB</span>
+              <span class="mono-num">${h.active_sockets_count} sockets</span>
+              <span class="mono-num">${h.cpu_percent}% CPU &middot; ${h.ram_mb} MB</span>
             </div>
-            ${h.c2_framework ? `<div class="host-threat-c2">${h.c2_framework} Isolated</div>` : ''}
+            ${c2BannerText ? `<div class="host-threat-c2 ${isHigh ? 'high-c2' : ''}"><span>${c2BannerText}</span><span style="opacity:0.75;">Inspect -></span></div>` : ''}
           </div>
         `;
       });
@@ -2463,8 +2747,8 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
   }
 
   function severAllCampaigns() {
-    if (confirm('ENTERPRISE ACTION: Immediately drop all C2 sockets across Cluster Alpha (Sliver) and Cluster Beta (Cobalt Strike)?')) {
-      alert('MITIGATION DEPLOYED: Kernel SetTcpEntry successfully terminated all correlated campaign sockets.');
+    if (confirm('ENTERPRISE CONTAINMENT: Immediately sever all correlated C2 sockets across Campaign-Alpha (WIN-PROD-SRV01, WS-ENG-04) and Campaign-Beta (WIN-APP-SRV02, REMOTE-SALES-10)?')) {
+      alert('CONTAINMENT DEPLOYED: Kernel SetTcpEntry(DELETE_TCB) + WFP Outbound Firewall rules enforced across all 4 compromised endpoints.');
     }
   }
 
@@ -2481,35 +2765,37 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     if (!container || !stateData || !stateData.campaigns) return;
     const campaigns = stateData.campaigns;
     const countLabel = document.getElementById('campaign-count-label');
-    if (countLabel) countLabel.innerText = `${campaigns.length} ACTIVE CAMPAIGNS DETECTED`;
+    if (countLabel) countLabel.innerText = `${campaigns.length} active clusters`;
 
     let html = '';
     campaigns.forEach(c => {
       const isSelected = (c.campaign_id === selectedCampaignId);
       const isContained = (c.status === 'CONTAINED');
       const isAlpha = (c.campaign_id === 'camp-alpha');
-      
+      const leftAccent = isContained ? '#10b981' : (isAlpha ? '#ef4444' : '#f59e0b');
+
       html += `
-        <div class="campaign-card ${isSelected ? 'selected' : ''}" onclick="selectCampaign('${c.campaign_id}')" style="${isContained ? 'border-color: #10b981; border-left-color: #10b981;' : ''}">
+        <div class="campaign-card ${isSelected ? 'selected' : ''}" onclick="selectCampaign('${c.campaign_id}')" style="border-left-color: ${leftAccent};">
           <div class="campaign-header">
-            <div class="campaign-title" style="${isContained ? 'color: #34d399;' : ''}">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 16h2v2h-2zm0-6h2v4h-2z"/></svg>
+            <div class="campaign-title" style="${isContained ? 'color: #6ee7b7;' : ''}">
+              <span class="live-dot ${isContained ? '' : (isAlpha ? 'pulsing' : 'high-dot')}"></span>
               ${c.name.split(':')[0]}
             </div>
             <div>
-              ${isContained 
-                ? '<span class="host-pill safe" style="font-size: 8px;">CONTAINED</span>' 
-                : `<span class="host-pill crit" style="font-size: 8px;">${isAlpha ? 'CRITICAL // DIRECT IP' : 'STEALTH // CDN FRONT'}</span>`}
+              ${isContained
+                ? '<span class="host-pill arch" style="color: #6ee7b7; border-color: rgba(16, 185, 129, 0.35);">CONTAINED</span>'
+                : `<span class="host-pill ${isAlpha ? 'crit' : 'high'}">${isAlpha ? 'CRITICAL &middot; DIRECT IP' : 'HIGH &middot; CDN FRONTED'}</span>`}
             </div>
           </div>
           <div class="campaign-grid">
-            <div class="campaign-kv"><span>FRAMEWORK</span><strong>${c.c2_framework}</strong></div>
-            <div class="campaign-kv"><span>CADENCE</span><strong style="color: var(--amber);">${c.cadence_profile}</strong></div>
-            <div class="campaign-kv" style="grid-column: span 2;"><span>DESTINATION</span><strong style="font-family: var(--font-mono); font-size: 9.5px;">${c.target_destination}</strong></div>
+            <div class="campaign-kv"><span>Framework</span><strong>${c.c2_framework}</strong></div>
+            <div class="campaign-kv"><span>Cadence (v1)</span><strong style="color: #fcd34d;">${c.cadence_profile}</strong></div>
+            <div class="campaign-kv" style="grid-column: span 2;"><span>C2 Infrastructure</span><strong>${c.target_destination}</strong></div>
+            <div class="campaign-kv" style="grid-column: span 2;"><span>JA4 Client Hello</span><strong style="color: var(--steel);">${c.ja4_fingerprint}</strong></div>
           </div>
           <div class="affected-hosts-row">
-            <span style="color: var(--text-dim); font-size: 9px;">Endpoints (${c.affected_hosts.length}):</span>
-            ${c.affected_hosts.map(h => `<span class="affected-host-chip">${h}</span>`).join('')}
+            <span style="color: var(--text-muted); font-size: 10.5px; font-weight: 500;">Hosts (${c.affected_hosts.length}):</span>
+            ${c.affected_hosts.map(h => `<span class="affected-host-chip" onclick="event.stopPropagation(); findAndDrilldownByName('${h}')" title="Open ${h} in Host Investigation">${h}</span>`).join('')}
           </div>
         </div>
       `;
@@ -2524,7 +2810,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
   function renderCampaignDetail() {
     const container = document.getElementById('campaign-detail-container');
     if (!container || !stateData || !stateData.campaigns) return;
-    
+
     const camp = stateData.campaigns.find(c => c.campaign_id === selectedCampaignId) || stateData.campaigns[0];
     if (!camp) return;
 
@@ -2534,234 +2820,278 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     let topologySvg = '';
     let forensicsHtml = '';
     let mitreHtml = '';
+    let evidenceTableHtml = '';
 
     if (isAlpha) {
       topologySvg = `
-        <div style="background: #040711; border: 1px solid #1e293b; border-radius: 6px; padding: 10px 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-around; position: relative;">
-          <!-- Adversary C2 Node -->
-          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 140px;">
-            <div class="pulse-node-red" style="width: 42px; height: 42px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="#f87171"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9v-2h2v2zm0-4H9V7h2v5zm4 4h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>
-            </div>
-            <div style="color: #f87171; font-weight: 800; font-size: 10.5px; margin-top: 5px;">ADVERSARY C2</div>
-            <div style="color: var(--text-dim); font-size: 9px; font-family: var(--font-mono);">193.26.158.114:443</div>
-            <span class="host-pill crit" style="font-size: 7.5px; margin-top: 2px;">Sliver Server</span>
+        <div class="killchain-canvas">
+          <div class="kc-node kc-red">
+            <div class="kc-tag">01 / Adversary C2</div>
+            <div class="kc-title">193.26.158.114:443</div>
+            <div class="kc-meta"><span>Sliver mTLS</span><span class="highlight-red">Direct IP</span></div>
           </div>
-
-          <!-- Ingress Vector Arrow -->
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
-            <span style="font-size: 8.5px; color: ${isContained ? '#94a3b8' : '#f87171'}; font-weight: 700; font-family: var(--font-mono);">${isContained ? 'SEVERED' : '8.4s Cadence (HTTPS)'}</span>
-            <svg width="110" height="14" style="overflow: visible;">
-              <line x1="0" y1="7" x2="100" y2="7" stroke="${isContained ? '#475569' : '#ef4444'}" stroke-width="2" class="${isContained ? '' : 'attack-pulse-red'}" />
-              <polygon points="100,3 108,7 100,11" fill="${isContained ? '#475569' : '#38bdf8'}" />
-            </svg>
-            <span style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">JA4: t13d1516h2..</span>
+          <div class="kc-edge">
+            <span class="kc-edge-pill" style="color: ${isContained ? '#9ca3af' : '#fca5a5'};">${isContained ? 'SEVERED' : '8.4s HTTPS'}</span>
+            <span style="color: ${isContained ? '#4b5563' : '#ef4444'}; font-family: var(--font-mono); font-size: 11px; letter-spacing: -1px;">──────►</span>
+            <span style="font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono);">t13d1516h2_8daaf..</span>
           </div>
-
-          <!-- Patient Zero Ingress Host -->
-          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 140px;">
-            <div class="pulse-node-cyan" style="width: 42px; height: 42px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 2px solid var(--cyan); display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--cyan)"><path d="M4 6h16v10H4V6zm2 2v6h12V8H6zm-4 9h20v2H2v-2z"/></svg>
-            </div>
-            <div style="color: white; font-weight: 800; font-size: 10.5px; margin-top: 5px;">WIN-PROD-SRV01</div>
-            <div style="color: var(--text-dim); font-size: 9px; font-family: var(--font-mono);">10.0.0.15 (Tier-1 App)</div>
-            <span class="host-pill arch" style="font-size: 7.5px; margin-top: 2px; border-color: #f87171; color: #f87171;">PATIENT ZERO / INGRESS</span>
+          <div class="kc-node kc-steel kc-clickable" onclick="findAndDrilldownByName('WIN-PROD-SRV01')">
+            <div class="kc-tag">02 / Patient Zero &middot; Tier-1</div>
+            <div class="kc-title">WIN-PROD-SRV01</div>
+            <div class="kc-meta"><span>10.0.1.15</span><span class="highlight-red">98.7% Crit</span></div>
           </div>
-
-          <!-- Lateral Pivot Vector Arrow -->
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
-            <span style="font-size: 8.5px; color: #f59e0b; font-weight: 700; font-family: var(--font-mono);">WMI / SMB Pivot</span>
-            <svg width="100" height="14" style="overflow: visible;">
-              <line x1="0" y1="7" x2="90" y2="7" stroke="#f59e0b" stroke-width="2" class="attack-pulse-amber" />
-              <polygon points="90,3 98,7 90,11" fill="#f59e0b" />
-            </svg>
-            <span style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">Port 445 / 135</span>
+          <div class="kc-edge">
+            <span class="kc-edge-pill" style="color: #fcd34d;">WMI / SMB Pivot</span>
+            <span style="color: #f59e0b; font-family: var(--font-mono); font-size: 11px; letter-spacing: -1px;">──────►</span>
+            <span style="font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono);">TCP 445 &middot; wmiprvse</span>
           </div>
-
-          <!-- Lateral Pivot Host -->
-          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 140px;">
-            <div class="pulse-node-amber" style="width: 42px; height: 42px; border-radius: 6px; background: rgba(245, 158, 11, 0.1); border: 2px solid #f59e0b; display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="#f59e0b"><path d="M4 6h16v10H4V6zm2 2v6h12V8H6zm-4 9h20v2H2v-2z"/></svg>
-            </div>
-            <div style="color: white; font-weight: 800; font-size: 10.5px; margin-top: 5px;">WS-ENG-04</div>
-            <div style="color: var(--text-dim); font-size: 9px; font-family: var(--font-mono);">10.0.2.44 (Tier-2 Workstation)</div>
-            <span class="host-pill arch" style="font-size: 7.5px; margin-top: 2px; border-color: #f59e0b; color: #f59e0b;">LATERAL PIVOT HOST</span>
+          <div class="kc-node kc-amber kc-clickable" onclick="findAndDrilldownByName('WS-ENG-04')">
+            <div class="kc-tag">03 / Lateral Pivot &middot; Tier-2</div>
+            <div class="kc-title">WS-ENG-04</div>
+            <div class="kc-meta"><span>10.0.3.44</span><span class="highlight-amber">86.5% High</span></div>
           </div>
         </div>
       `;
 
       forensicsHtml = `
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 6px;">
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">SHARED TLS JA4 HASH</div>
-            <div style="font-size: 9.5px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">t13d1516h2_8daaf615..</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Shared TLS JA4</div>
+            <div style="font-size: 11px; color: var(--steel); font-family: var(--font-mono); font-weight: 500; margin-top: 2px;">t13d1516h2_8daaf4b10222</div>
           </div>
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">SHANNON ENTROPY</div>
-            <div style="font-size: 9.5px; color: #f87171; font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">7.84 / 8.00 (Encrypted)</div>
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">IAT MAD &amp; IQR (v1)</div>
+            <div style="font-size: 11px; color: #fca5a5; font-family: var(--font-mono); font-weight: 600; margin-top: 2px;">MAD 0.082 &middot; IQR 0.120</div>
           </div>
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">CADENCE & JITTER</div>
-            <div style="font-size: 9.5px; color: var(--amber); font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">8.4s ±0.8s (9.5% Rigid)</div>
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Cadence &amp; Bowley Skew</div>
+            <div style="font-size: 11px; color: var(--text-main); font-family: var(--font-mono); font-weight: 500; margin-top: 2px;">8.4s &plusmn;0.8s (Skew +0.04)</div>
           </div>
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">EGRESS ATTRIBUTION</div>
-            <div style="font-size: 9.5px; color: white; font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">Direct Raw IP (No SNI)</div>
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Egress Attribution</div>
+            <div style="font-size: 11px; color: var(--text-main); font-family: var(--font-mono); font-weight: 500; margin-top: 2px;">Direct Raw IP (No SNI)</div>
           </div>
         </div>
       `;
 
       mitreHtml = `
-        <div style="margin-bottom: 8px;">
-          <div style="font-weight: 700; color: white; font-size: 9.5px; margin-bottom: 4px;">MITRE ATT&CK ALIGNMENT</div>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: #f87171; font-weight: 700;">T1071.001 Web Protocols</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">HTTPS periodic beacon loop</div>
+        <div>
+          <div style="font-weight: 600; color: var(--text-muted); font-size: 10px; margin-bottom: 5px; letter-spacing: 0.04em; text-transform: uppercase;">MITRE ATT&amp;CK Enterprise Alignment</div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--text-main); font-weight: 600; font-family: var(--font-mono);">T1071.001 Web Protocols</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Periodic HTTPS C2 heartbeat</div>
             </div>
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: #f59e0b; font-weight: 700;">T1090.004 Direct IP Egress</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">Bypasses corporate DNS logs</div>
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--text-main); font-weight: 600; font-family: var(--font-mono);">T1021.002 SMB / WMI</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">East-West lateral movement</div>
             </div>
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: #f87171; font-weight: 700;">T1059.001 PowerShell</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">LOLBIN execution context</div>
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--text-main); font-weight: 600; font-family: var(--font-mono);">T1059.001 PowerShell</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Secondary fallback beacon</div>
             </div>
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: var(--cyan); font-weight: 700;">T1573.002 Asymm Crypto</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">mTLS ChaCha20 tunnel</div>
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--steel); font-weight: 600; font-family: var(--font-mono);">T1573.002 mTLS Crypto</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Go crypto/tls ChaCha20</div>
             </div>
+          </div>
+        </div>
+      `;
+
+      evidenceTableHtml = `
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600; color: var(--text-dim); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;">Correlated Host Telemetry &amp; Lateral Matrix</span>
+            <span style="font-size: 10.5px; color: var(--text-muted);">Select row to inspect in Host Investigation</span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint &amp; Tier</th>
+                  <th>Process (PID)</th>
+                  <th>Local -> Remote Socket</th>
+                  <th>Role in Kill-Chain</th>
+                  <th>Cadence / IAT MAD</th>
+                  <th style="text-align: right;">Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="row-threat" style="cursor: pointer;" onclick="findAndDrilldownByName('WIN-PROD-SRV01')">
+                  <td><strong style="color: var(--text-main);">WIN-PROD-SRV01</strong> <span style="color: var(--text-muted);">(10.0.1.15)</span></td>
+                  <td style="color: #fca5a5;">update.exe (5824)</td>
+                  <td>10.0.1.15:49152 -> 193.26.158.114:443</td>
+                  <td><span class="host-pill crit">PATIENT ZERO &middot; PRIMARY C2</span></td>
+                  <td style="color: var(--text-main);">8.4s &plusmn;0.8s (MAD 0.082)</td>
+                  <td style="text-align: right; font-weight: 600; color: #fca5a5;">98.7%</td>
+                </tr>
+                <tr class="row-threat" style="cursor: pointer;" onclick="findAndDrilldownByName('WIN-PROD-SRV01')">
+                  <td><strong style="color: var(--text-main);">WIN-PROD-SRV01</strong> <span style="color: var(--text-muted);">(10.0.1.15)</span></td>
+                  <td style="color: #fcd34d;">wmiprvse.exe (3104)</td>
+                  <td>10.0.1.15:50218 -> 10.0.3.44:445</td>
+                  <td><span class="host-pill high">EAST-WEST SMB PIVOT</span></td>
+                  <td style="color: var(--text-main);">4.0s &plusmn;0.2s (MAD 0.050)</td>
+                  <td style="text-align: right; font-weight: 600; color: #fcd34d;">89.2%</td>
+                </tr>
+                <tr class="row-threat" style="cursor: pointer;" onclick="findAndDrilldownByName('WS-ENG-04')">
+                  <td><strong style="color: var(--text-main);">WS-ENG-04</strong> <span style="color: var(--text-muted);">(10.0.3.44)</span></td>
+                  <td style="color: #fcd34d;">sliver-stager.exe (4412)</td>
+                  <td>10.0.3.44:52190 -> 193.26.158.114:443</td>
+                  <td><span class="host-pill high">SECONDARY C2 CALLBACK</span></td>
+                  <td style="color: var(--text-main);">8.4s &plusmn;0.8s (MAD 0.085)</td>
+                  <td style="text-align: right; font-weight: 600; color: #fcd34d;">86.5%</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       `;
     } else {
       topologySvg = `
-        <div style="background: #040711; border: 1px solid #1e293b; border-radius: 6px; padding: 10px 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-around; position: relative;">
-          <!-- Adversary C2 Node (CDN Fronted) -->
-          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 140px;">
-            <div class="pulse-node-amber" style="width: 42px; height: 42px; border-radius: 50%; background: rgba(245, 158, 11, 0.15); border: 2px solid #f59e0b; display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="#f59e0b"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
-            </div>
-            <div style="color: #f59e0b; font-weight: 800; font-size: 10.5px; margin-top: 5px;">AZURE CDN FRONT</div>
-            <div style="color: var(--text-dim); font-size: 9px; font-family: var(--font-mono);">cdn-azure-edge.net:8443</div>
-            <span class="host-pill warn" style="font-size: 7.5px; margin-top: 2px;">Fronted to 45.33.32.156</span>
+        <div class="killchain-canvas">
+          <div class="kc-node kc-amber">
+            <div class="kc-tag">01 / Azure CDN Front</div>
+            <div class="kc-title">cdn-azure-edge.net:8443</div>
+            <div class="kc-meta"><span>Fronted Origin</span><span class="highlight-amber">45.33.32.156</span></div>
           </div>
-
-          <!-- Ingress Vector Arrow -->
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
-            <span style="font-size: 8.5px; color: ${isContained ? '#94a3b8' : '#f59e0b'}; font-weight: 700; font-family: var(--font-mono);">${isContained ? 'SEVERED' : '15.0s Cadence (HTTPS)'}</span>
-            <svg width="110" height="14" style="overflow: visible;">
-              <line x1="0" y1="7" x2="100" y2="7" stroke="${isContained ? '#475569' : '#f59e0b'}" stroke-width="2" class="${isContained ? '' : 'attack-pulse-purple'}" />
-              <polygon points="100,3 108,7 100,11" fill="${isContained ? '#475569' : '#f59e0b'}" />
-            </svg>
-            <span style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">JA4: t13d190800..</span>
+          <div class="kc-edge">
+            <span class="kc-edge-pill" style="color: ${isContained ? '#9ca3af' : '#fcd34d'};">${isContained ? 'SEVERED' : '15.0s Malleable'}</span>
+            <span style="color: ${isContained ? '#4b5563' : '#f59e0b'}; font-family: var(--font-mono); font-size: 11px; letter-spacing: -1px;">──────►</span>
+            <span style="font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono);">t13d190800_9c2b..</span>
           </div>
-
-          <!-- Ingress Host -->
-          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 140px;">
-            <div class="pulse-node-cyan" style="width: 42px; height: 42px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 2px solid var(--cyan); display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--cyan)"><path d="M4 6h16v10H4V6zm2 2v6h12V8H6zm-4 9h20v2H2v-2z"/></svg>
-            </div>
-            <div style="color: white; font-weight: 800; font-size: 10.5px; margin-top: 5px;">WIN-APP-SRV02</div>
-            <div style="color: var(--text-dim); font-size: 9px; font-family: var(--font-mono);">10.0.0.16 (Tier-1 Web)</div>
-            <span class="host-pill arch" style="font-size: 7.5px; margin-top: 2px; border-color: #f87171; color: #f87171;">COMPROMISED HOST</span>
+          <div class="kc-node kc-steel kc-clickable" onclick="findAndDrilldownByName('WIN-APP-SRV02')">
+            <div class="kc-tag">02 / Ingress Host &middot; Tier-1</div>
+            <div class="kc-title">WIN-APP-SRV02</div>
+            <div class="kc-meta"><span>10.0.1.16</span><span class="highlight-red">94.2% Crit</span></div>
           </div>
-
-          <!-- Lateral Pivot Vector Arrow -->
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 3px;">
-            <span style="font-size: 8.5px; color: #38bdf8; font-weight: 700; font-family: var(--font-mono);">TDS / SQL Link</span>
-            <svg width="100" height="14" style="overflow: visible;">
-              <line x1="0" y1="7" x2="90" y2="7" stroke="#38bdf8" stroke-width="2" class="attack-pulse-amber" />
-              <polygon points="90,3 98,7 90,11" fill="#38bdf8" />
-            </svg>
-            <span style="font-size: 8px; color: var(--text-dim); font-family: var(--font-mono);">Port 1433 SQL</span>
+          <div class="kc-edge">
+            <span class="kc-edge-pill" style="color: var(--steel);">TDS / SQL Probe</span>
+            <span style="color: #60a5fa; font-family: var(--font-mono); font-size: 11px; letter-spacing: -1px;">──────►</span>
+            <span style="font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono);">Port 1433 / VPN</span>
           </div>
-
-          <!-- Target Crown Jewel Asset -->
-          <div style="display: flex; flex-direction: column; align-items: center; text-align: center; width: 140px;">
-            <div style="width: 42px; height: 42px; border-radius: 6px; background: rgba(16, 185, 129, 0.1); border: 2px solid #10b981; display: flex; align-items: center; justify-content: center;">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="#34d399"><path d="M12 3C7.58 3 4 4.79 4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7c0-2.21-3.58-4-8-4zm0 2c3.87 0 6 1.5 6 2s-2.13 2-6 2-6-1.5-6-2 2.13-2 6-2z"/></svg>
-            </div>
-            <div style="color: white; font-weight: 800; font-size: 10.5px; margin-top: 5px;">SQL01-PROD</div>
-            <div style="color: var(--text-dim); font-size: 9px; font-family: var(--font-mono);">10.0.1.50 (Crown Jewel)</div>
-            <span class="host-pill safe" style="font-size: 7.5px; margin-top: 2px;">TARGET DATA ASSET</span>
+          <div class="kc-node kc-green kc-clickable" onclick="findAndDrilldownByName('SQL-CLUSTER-01')">
+            <div class="kc-tag">03 / Target Asset &middot; Tier-1 DB</div>
+            <div class="kc-title">SQL-CLUSTER-01</div>
+            <div class="kc-meta"><span>10.0.1.20</span><span class="highlight-green">Protected</span></div>
           </div>
         </div>
       `;
 
       forensicsHtml = `
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 6px;">
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">SHARED TLS JA4 HASH</div>
-            <div style="font-size: 9.5px; color: var(--cyan); font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">t13d190800_261546b3..</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Shared TLS JA4</div>
+            <div style="font-size: 11px; color: var(--steel); font-family: var(--font-mono); font-weight: 500; margin-top: 2px;">t13d190800_9c2b14e08a11</div>
           </div>
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">SHANNON ENTROPY</div>
-            <div style="font-size: 9.5px; color: #f87171; font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">7.92 / 8.00 (Shellcode)</div>
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">IAT MAD &amp; IQR (v1)</div>
+            <div style="font-size: 11px; color: #fca5a5; font-family: var(--font-mono); font-weight: 600; margin-top: 2px;">MAD 0.064 &middot; IQR 0.095</div>
           </div>
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">CADENCE & JITTER</div>
-            <div style="font-size: 9.5px; color: var(--amber); font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">15.0s ±1.1s (7.3% Rigid)</div>
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Cadence &amp; Bowley Skew</div>
+            <div style="font-size: 11px; color: var(--text-main); font-family: var(--font-mono); font-weight: 500; margin-top: 2px;">15.0s &plusmn;1.1s (Skew -0.02)</div>
           </div>
-          <div style="background: #040711; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--border);">
-            <div style="font-size: 8px; color: var(--text-dim);">EGRESS ATTRIBUTION</div>
-            <div style="font-size: 9.5px; color: #f59e0b; font-family: var(--font-mono); font-weight: 700; margin-top: 2px;">Domain Fronted (Azure Edge)</div>
+          <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
+            <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Egress Attribution</div>
+            <div style="font-size: 11px; color: #fcd34d; font-family: var(--font-mono); font-weight: 500; margin-top: 2px;">Domain Fronted (Azure CDN)</div>
           </div>
         </div>
       `;
 
       mitreHtml = `
-        <div style="margin-bottom: 8px;">
-          <div style="font-weight: 700; color: white; font-size: 9.5px; margin-bottom: 4px;">MITRE ATT&CK ALIGNMENT</div>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: #f59e0b; font-weight: 700;">T1090.004 Domain Fronting</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">CDN-routed covert egress</div>
+        <div>
+          <div style="font-weight: 600; color: var(--text-muted); font-size: 10px; margin-bottom: 5px; letter-spacing: 0.04em; text-transform: uppercase;">MITRE ATT&amp;CK Enterprise Alignment</div>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--text-main); font-weight: 600; font-family: var(--font-mono);">T1090.004 Domain Fronting</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">CDN-routed covert egress</div>
             </div>
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: #f87171; font-weight: 700;">T1071.001 Web Protocols</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">Port 8443 beacon loop</div>
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--text-main); font-weight: 600; font-family: var(--font-mono);">T1218.011 Rundll32 Proxy</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Malleable C2 DLL loader</div>
             </div>
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: #f87171; font-weight: 700;">T1027 Obfuscated Files</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">Reflective DLL loader in memory</div>
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--text-main); font-weight: 600; font-family: var(--font-mono);">T1055 Process Injection</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">In-memory beacon thread</div>
             </div>
-            <div style="background: #040711; padding: 5px 7px; border-radius: 4px; border: 1px solid var(--border);">
-              <div style="font-size: 8.5px; color: var(--cyan); font-weight: 700;">T1573.002 Symmetric Crypto</div>
-              <div style="font-size: 8px; color: var(--text-dim); margin-top: 1px;">AES-256 session traffic</div>
+            <div style="background: #0c0e13; padding: 7px 10px; border-radius: 5px; border: 1px solid var(--border);">
+              <div style="font-size: 10.5px; color: var(--steel); font-weight: 600; font-family: var(--font-mono);">T1071.001 Web Protocols</div>
+              <div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Port 8443 HTTPS polling</div>
             </div>
+          </div>
+        </div>
+      `;
+
+      evidenceTableHtml = `
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 600; color: var(--text-dim); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;">Correlated Host Telemetry &amp; Lateral Matrix</span>
+            <span style="font-size: 10.5px; color: var(--text-muted);">Select row to inspect in Host Investigation</span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint &amp; Tier</th>
+                  <th>Process (PID)</th>
+                  <th>Local -> Remote Socket</th>
+                  <th>Role in Kill-Chain</th>
+                  <th>Cadence / IAT MAD</th>
+                  <th style="text-align: right;">Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="row-threat" style="cursor: pointer;" onclick="findAndDrilldownByName('WIN-APP-SRV02')">
+                  <td><strong style="color: var(--text-main);">WIN-APP-SRV02</strong> <span style="color: var(--text-muted);">(10.0.1.16)</span></td>
+                  <td style="color: #fca5a5;">rundll32.exe (6712)</td>
+                  <td>10.0.1.16:51044 -> 45.33.32.156:8443</td>
+                  <td><span class="host-pill crit">TIER-1 CDN FRONTED C2</span></td>
+                  <td style="color: var(--text-main);">15.0s &plusmn;1.1s (MAD 0.064)</td>
+                  <td style="text-align: right; font-weight: 600; color: #fca5a5;">94.2%</td>
+                </tr>
+                <tr class="row-threat" style="cursor: pointer;" onclick="findAndDrilldownByName('REMOTE-SALES-10')">
+                  <td><strong style="color: var(--text-main);">REMOTE-SALES-10</strong> <span style="color: var(--text-muted);">(10.0.5.88)</span></td>
+                  <td style="color: #fcd34d;">dllhost.exe (7120)</td>
+                  <td>10.0.5.88:54310 -> 45.33.32.156:8443</td>
+                  <td><span class="host-pill high">VPN INGRESS PATIENT ZERO</span></td>
+                  <td style="color: var(--text-main);">15.0s &plusmn;1.1s (MAD 0.071)</td>
+                  <td style="text-align: right; font-weight: 600; color: #fcd34d;">81.4%</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       `;
     }
 
     container.innerHTML = `
-      <div>
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 8px;">
-          <span style="font-weight: 800; color: var(--cyan); font-size: 11px; letter-spacing: 0.5px;">
-            VISUAL ATTACK TOPOLOGY: ${camp.name.toUpperCase()}
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 7px;">
+          <span style="font-weight: 600; color: var(--text-main); font-size: 12px; letter-spacing: 0.02em;">
+            ${camp.name}
           </span>
-          <span class="host-pill ${isContained ? 'safe' : 'crit'}" style="font-size: 8px;">
-            ${isContained ? 'CONTAINED // KERNEL SEVERED' : 'ACTIVE INTRUSION GRAPH'}
+          <span class="host-pill ${isContained ? 'arch' : 'crit'}" style="${isContained ? 'color: #6ee7b7; border-color: rgba(16, 185, 129, 0.35);' : ''}">
+            ${isContained ? 'CONTAINED &middot; SOCKETS SEVERED' : 'ACTIVE INTRUSION GRAPH'}
           </span>
         </div>
 
         ${topologySvg}
         ${forensicsHtml}
         ${mitreHtml}
+        ${evidenceTableHtml}
       </div>
 
       <!-- Unified Action Footer (Right Column Only) -->
-      <div style="border-top: 1px solid var(--border); padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
-        <div style="font-size: 9.5px; color: var(--text-dim);">
-          Countermeasures affect only ${camp.affected_hosts.length} correlated targets. System services remain uninterrupted.
+      <div style="border-top: 1px solid var(--border); padding-top: 9px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+        <div style="font-size: 11px; color: var(--text-dim);">
+          Surgical containment targets only <strong style="color: var(--text-main);">${camp.affected_hosts.length} correlated endpoints</strong> (${camp.affected_hosts.join(', ')}).
         </div>
         <div style="display: flex; gap: 8px;">
-          ${isContained 
-            ? '<span class="host-pill safe" style="font-weight: 700; font-size: 10px; padding: 4px 10px;">[[OK]] Campaign Contained (Sockets Dropped)</span>'
-            : `<button class="action-btn danger" onclick="promptCampaignSever('${camp.campaign_id}')" style="font-weight: 700; font-size: 10px; padding: 4px 10px;">Sever This Campaign (${camp.affected_hosts.length} Sockets)</button>`}
-          <button class="action-btn" onclick="openStixModal('${camp.campaign_id}')" style="font-size: 10px; padding: 4px 10px;">Export STIX 2.1</button>
-          <button class="action-btn" onclick="openYaralModal('${camp.campaign_id}')" style="font-size: 10px; padding: 4px 10px;">Push Yara-L Rule</button>
+          ${isContained
+            ? '<span class="host-pill arch" style="color: #6ee7b7; border-color: rgba(16, 185, 129, 0.35); font-size: 10.5px; padding: 4px 10px;">Campaign Contained &middot; Sockets Severed</span>'
+            : `<button class="action-btn danger" onclick="promptCampaignSever('${camp.campaign_id}')" style="font-size: 11px; padding: 5px 12px;">Sever Campaign (${camp.affected_hosts.length} Hosts)</button>`}
+          <button class="action-btn" onclick="openStixModal('${camp.campaign_id}')" style="font-size: 11px; padding: 5px 10px;">Export STIX 2.1</button>
+          <button class="action-btn" onclick="openYaralModal('${camp.campaign_id}')" style="font-size: 11px; padding: 5px 10px;">Push YARA-L Rule</button>
         </div>
       </div>
     `;
@@ -2829,7 +3159,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const destHost = camp.target_destination.split(':')[0];
     const yaralRule = `rule uncloak_${camp.campaign_id.replace('-', '_')}_c2_detection {
   meta:
-    author = "Invictus // Uncloak Autonomous EDR"
+    author = "Invictus // Uncloak Host-Centric C2 Detection Engine"
     description = "Automated detection rule pushed from Uncloak C2 Threat Hunting Console"
     severity = "CRITICAL"
     mitre_attack = "T1071.001, T1090.004"
@@ -2859,9 +3189,8 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     closeYaralModal();
   }
 
-    let currentHostSubtab = 'flows';
+  let currentHostSubtab = 'flows';
 
-  
   // RHYTHM SPARKLINE & SIGNAL ANALYSIS TELEMETRY
   function renderLogicPulse(f) {
     const isThreat = f.is_threat || f.threat_score > 0.7;
@@ -2870,8 +3199,8 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     if (isAsynch) {
       return `
         <div class="pulse-cell">
-          <span style="color: var(--text-dim); font-size: 11px; width: 44px; text-align: right; display: inline-block;">Asynch</span>
-          <div class="rhythm-track" title="Stochastic packet arrival - human interaction">
+          <span style="color: var(--text-muted); font-size: 11px; width: 46px; text-align: right; display: inline-block; font-family: var(--font-mono);">Async</span>
+          <div class="rhythm-track" title="Stochastic packet arrival - human/browser interaction (High IAT MAD)">
             <div class="organic-wave">
               <span class="organic-bar" style="height: 3px;"></span>
               <span class="organic-bar" style="height: 8px;"></span>
@@ -2882,32 +3211,36 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
               <span class="organic-bar" style="height: 3px;"></span>
             </div>
           </div>
-          <span class="jitter-pill organic">ORGANIC / HUMAN</span>
+          <span class="jitter-pill organic">Organic / Variable</span>
         </div>
       `;
     }
 
     let ticksHtml = '';
     let tickCount = 4;
-    let jitterLabel = '9.5% JITTER (RIGID APT)';
+    const madStr = f.iat_mad_ratio !== undefined ? `MAD ${Number(f.iat_mad_ratio).toFixed(2)}` : `${f.jitter_pct || '9.5%'} Jitter`;
+    let jitterLabel = `${f.jitter_pct || '9.5%'} Jitter &middot; ${madStr}`;
     let pillClass = 'rigid';
 
     if (f.interval_str.includes('8.4')) {
       tickCount = 4;
-      jitterLabel = '9.5% JITTER (RIGID APT)';
+      jitterLabel = `9.5% Jitter &middot; MAD 0.08`;
     } else if (f.interval_str.includes('15.0')) {
       tickCount = 3;
-      jitterLabel = '7.3% JITTER (RIGID C2)';
+      jitterLabel = `7.3% Jitter &middot; MAD 0.06`;
     } else if (f.interval_str.includes('60.0')) {
       tickCount = 2;
-      jitterLabel = '12.1% JITTER (STEALTH)';
+      jitterLabel = `12.1% Jitter &middot; MAD 0.11`;
+    } else if (f.interval_str.includes('4.0')) {
+      tickCount = 4;
+      jitterLabel = `5.0% Jitter &middot; MAD 0.05`;
     } else if (f.interval_str.includes('10.0')) {
       tickCount = 3;
-      jitterLabel = '0.1% JITTER (VENDOR DAEMON)';
+      jitterLabel = `0.1% Jitter &middot; Signed`;
       pillClass = 'clean';
     } else {
       tickCount = isThreat ? 3 : 2;
-      jitterLabel = isThreat ? 'ANOMALOUS JITTER' : 'SCHEDULED DAEMON';
+      jitterLabel = isThreat ? `${f.jitter_pct || '9.0%'} Jitter &middot; Rigid` : 'Expected Daemon';
       pillClass = isThreat ? 'rigid' : 'clean';
     }
 
@@ -2915,12 +3248,12 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       ticksHtml += `<span class="rhythm-tick ${isThreat ? 'c2-tick' : 'benign-tick'}"></span>`;
     }
 
-    const intervalColor = isThreat ? 'var(--cyan)' : 'var(--green)';
+    const intervalColor = isThreat ? '#fca5a5' : 'var(--text-dim)';
 
     return `
       <div class="pulse-cell">
-        <strong style="color: ${intervalColor}; font-size: 11px; width: 44px; text-align: right; display: inline-block;">${f.interval_str}</strong>
-        <div class="rhythm-track ${isThreat ? 'threat-track' : ''}" title="${isThreat ? 'Rigid clockwork interval - metronomic beacon' : 'Periodic benign daemon'}">
+        <strong style="color: ${intervalColor}; font-size: 11.5px; width: 46px; text-align: right; display: inline-block; font-family: var(--font-mono);">${f.interval_str}</strong>
+        <div class="rhythm-track ${isThreat ? 'threat-track' : ''}" title="${isThreat ? 'Rigid clockwork interval - low IAT MAD Ratio' : 'Expected periodic vendor daemon'}">
           ${ticksHtml}
         </div>
         <span class="jitter-pill ${pillClass}">${jitterLabel}</span>
@@ -3012,35 +3345,35 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       const isSelected = p.pid === stateData.selected_pid;
       const isThreat = (p.threat_score || 0) > 0.7;
       const isLolbin = ['powershell.exe', 'cmd.exe', 'rundll32.exe', 'mshta.exe', 'certutil.exe'].includes(p.name.toLowerCase()) && p.socket_count > 0;
-      let sigBadge = `<span class="host-pill ${p.is_signed ? 'safe' : 'crit'}">${p.is_signed ? 'MICROSOFT SIGNED' : 'UNSIGNED PE'}</span>`;
+      let sigBadge = `<span style="color: var(--text-dim); font-size: 10.5px;">${p.is_signed ? 'Microsoft Signed' : '<span class="host-pill crit">Unsigned PE</span>'}</span>`;
       if (isLolbin) {
-        sigBadge = `<span class="host-pill lolbin" title="Legitimate binary abusing network C2">LOLBIN ABUSE</span>`;
+        sigBadge = `<span class="host-pill lolbin" title="Legitimate binary abusing network C2">LOLBin Abuse</span>`;
       }
 
-      let bwRate = isThreat ? '<span style="color: #f87171; font-weight: 700;">1.4 MB/s (Exfil)</span>' : (p.socket_count > 0 ? '<span style="color: var(--text-dim); font-size: 10px;">0 KB/s (Idle)</span>' : '<span style="color: var(--text-muted); font-size: 10px;">0 KB/s</span>');
+      let bwRate = isThreat ? '<span style="color: #fca5a5; font-weight: 600;">1.4 MB/s (Exfil)</span>' : (p.socket_count > 0 ? '<span style="color: var(--text-muted); font-size: 10px;">0 KB/s (Idle)</span>' : '<span style="color: var(--text-muted); font-size: 10px;">0 KB/s</span>');
 
       rowsHtml += `
         <tr class="${isThreat ? 'row-threat' : ''} ${isSelected ? 'selected' : ''}" data-pid="${p.pid}" onclick="selectFlow(${p.pid})" style="cursor: pointer;">
-          <td><strong style="cursor: pointer; color: var(--cyan); text-decoration: underline;" title="View PID Connection History" onclick="event.stopPropagation(); openPidHistoryModal(${p.pid}, '${p.name}')">${p.pid}</strong></td>
-          <td><strong style="color: ${isThreat ? '#f87171' : 'white'};">${p.name}</strong></td>
+          <td><strong style="cursor: pointer; color: var(--steel); text-decoration: underline;" title="View PID Connection History" onclick="event.stopPropagation(); openPidHistoryModal(${p.pid}, '${p.name}')">${p.pid}</strong></td>
+          <td><strong style="color: ${isThreat ? '#fca5a5' : 'var(--text-main)'}; font-weight: ${isThreat ? '600' : '500'};">${p.name}</strong></td>
           <td style="color: var(--text-dim);">${p.ppid}</td>
           <td style="font-size: 11px; color: var(--text-dim);">${p.start_time}</td>
           <td style="font-size: 11px;">${p.username}</td>
           <td>${p.cpu_percent}%</td>
           <td>${p.ram_mb} MB</td>
           <td>
-            <strong style="color: var(--cyan); font-size: 11px;">${p.bandwidth_usage || '0 B'}</strong>
-            <div style="font-size: 9px;">${bwRate}</div>
+            <span style="color: var(--text-main); font-size: 11px; font-weight: 500;">${p.bandwidth_usage || '0 B'}</span>
+            <div style="font-size: 9.5px;">${bwRate}</div>
           </td>
           <td>${sigBadge}</td>
           <td>
-            ${p.socket_count > 0 
-              ? `<span class="host-pill ${isThreat ? 'crit' : 'eval'}" style="cursor: pointer;" onclick="event.stopPropagation(); filterFlowsByPid(${p.pid})">${p.socket_count} Sockets</span>`
-              : '<span style="color: var(--text-muted); font-size: 10px;">0 (Inert)</span>'}
+            ${p.socket_count > 0
+              ? `<span class="host-pill ${isThreat ? 'crit' : 'arch'}" style="cursor: pointer;" onclick="event.stopPropagation(); filterFlowsByPid(${p.pid})">${p.socket_count} Sockets</span>`
+              : '<span style="color: var(--text-muted); font-size: 10.5px;">0 (Inert)</span>'}
           </td>
           <td style="text-align: center; white-space: nowrap;">
             <button class="action-btn" onclick="event.stopPropagation(); selectFlow(${p.pid})" style="padding: 2px 7px; margin-right: 4px;">Inspect</button>
-            <button class="action-btn" style="background: rgba(56, 189, 248, 0.15); border-color: var(--cyan); color: var(--cyan); font-weight: 700; padding: 2px 7px; margin-right: 4px;" onclick="event.stopPropagation(); openPidHistoryModal(${p.pid}, '${p.name}')">History</button>
+            <button class="action-btn" style="padding: 2px 7px; margin-right: 4px;" onclick="event.stopPropagation(); openPidHistoryModal(${p.pid}, '${p.name}')">History</button>
             <button class="action-btn danger" onclick="event.stopPropagation(); promptKillTreeModal(${p.pid}, '${p.name}')" style="padding: 2px 7px;">Kill Tree</button>
           </td>
         </tr>
@@ -3063,22 +3396,32 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       const isSelected = r.pid === stateData.selected_pid;
       rowsHtml += `
         <tr class="${isCrit ? 'row-threat' : ''} ${isSelected ? 'selected' : ''}" data-pid="${r.pid}" onclick="selectFlow(${r.pid})" style="cursor: pointer;">
-          <td style="color: var(--text-dim); font-size: 11px; white-space: nowrap;"><strong>${r.timestamp}</strong></td>
-          <td><strong style="color: ${isCrit ? '#f87171' : 'white'}; cursor: pointer; text-decoration: underline;" onclick="event.stopPropagation(); openPidHistoryModal(${r.pid}, '${r.process_name}')">${r.process_name} (${r.pid})</strong></td>
-          <td style="color: var(--cyan); font-size: 10px;">${r.direction || 'OUTBOUND'}</td>
+          <td style="color: var(--text-dim); font-size: 11px; white-space: nowrap;">${r.timestamp}</td>
+          <td><strong style="color: ${isCrit ? '#fca5a5' : 'var(--text-main)'}; cursor: pointer; font-weight: ${isCrit ? '600' : '500'};" onclick="event.stopPropagation(); openPidHistoryModal(${r.pid}, '${r.process_name}')">${r.process_name} (${r.pid})</strong></td>
+          <td style="color: var(--text-dim); font-size: 10.5px;">${r.direction || 'OUTBOUND'}</td>
           <td style="font-size: 11px; color: var(--text-dim);">${r.local_addr}</td>
-          <td><strong>${r.remote_addr}</strong></td>
-          <td style="color: ${r.sni && r.sni.includes('RAW') ? '#f87171' : 'var(--text-dim)'};">${r.sni || '-'}</td>
-          <td style="color: var(--cyan);">${r.duration || 'Active'}</td>
+          <td><strong style="color: var(--text-main); font-weight: 500;">${r.remote_addr}</strong></td>
+          <td style="color: ${r.sni && r.sni.includes('RAW') ? '#fca5a5' : 'var(--text-dim)'};">${r.sni || '-'}</td>
+          <td style="color: var(--text-dim);">${r.duration || 'Active'}</td>
           <td>${r.bytes_str || '-'}</td>
-          <td style="font-size: 10px; color: ${r.state === 'ESTABLISHED' ? 'var(--green)' : 'var(--text-muted)'};">${r.state}</td>
+          <td style="font-size: 10.5px; color: ${r.state === 'ESTABLISHED' ? '#6ee7b7' : 'var(--text-muted)'};">${r.state}</td>
           <td>
-            <span class="host-pill ${isCrit ? 'crit' : (isHigh ? 'high' : 'safe')}">${r.verdict}</span>
+            ${(isCrit || isHigh)
+              ? `<span class="host-pill ${isCrit ? 'crit' : 'high'}">${r.verdict}</span>`
+              : `<span style="color: var(--text-muted); font-size: 10.5px;">${r.verdict}</span>`}
           </td>
         </tr>
       `;
     });
     smartUpdateTbody(tbody, rowsHtml, stateData.selected_pid);
+  }
+
+  let currentFullSha256 = 'a4f982d17c63e01948b55209df712839ca004918273645519283746501928374';
+
+  function copyCurrentSha256() {
+    if (navigator.clipboard && currentFullSha256) {
+      navigator.clipboard.writeText(currentFullSha256);
+    }
   }
 
   function updateDrawerCards(pid) {
@@ -3092,15 +3435,20 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         item = {
           pid: proc.pid,
           process_name: proc.name,
+          src_ip: (stateData.selected_host && stateData.selected_host.ip_address) || '10.0.1.15',
+          src_port: 49152,
           dst_ip: proc.socket_count > 0 ? 'Multiple Endpoints' : '127.0.0.1',
-          dst_port: proc.socket_count > 0 ? '(Network Active)' : 'Local',
-          binary_path: proc.path || ('C:/Windows/System32/' + proc.name),
+          dst_port: proc.socket_count > 0 ? 443 : 0,
+          binary_path: proc.path || ('C:\\\\Windows\\\\System32\\\\' + proc.name),
+          command_line: proc.name + ' --service',
+          username: proc.username || 'NT AUTHORITY\\\\SYSTEM',
+          process_guid: `{61b338eb-${proc.pid}-0001-a4f9-82d17c63e019}`,
           sig_info: proc.is_signed ? 'Microsoft Corporation (Verified)' : 'Unsigned PE / Local Process',
-          sha256: proc.sha256 || 'N/A',
+          sha256: proc.sha256 || 'a4f982d17c63e01948b55209df712839ca004918273645519283746501928374',
           parent_process: proc.parent_name ? (proc.parent_name + ' (PID ' + proc.ppid + ')') : ('Parent PID ' + proc.ppid),
           first_seen: proc.start_time || '2026-11-02 14:10:02 UTC',
-          last_seen: 'Active (Now)',
-          duration: proc.uptime || 'Active',
+          last_seen: '2026-11-02 14:26:45 UTC',
+          duration: proc.uptime || '16m 43s',
           interval_str: proc.socket_count > 0 ? (proc.socket_count + ' Open Sockets') : 'Inert / Standby',
           jitter_str: proc.bandwidth_usage || '0 B',
           is_severed: false,
@@ -3108,78 +3456,99 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
           payload_str: proc.bandwidth_usage || '0 B',
           bursts: 'CPU: ' + proc.cpu_percent + '% | RAM: ' + proc.ram_mb + ' MB',
           jitter_pct: proc.socket_count > 0 ? (proc.socket_count + ' Sockets') : '0 Sockets',
-          mitre_technique: isThreat ? 'T1059 / T1055' : 'None',
+          iat_mad_ratio: isThreat ? 0.082 : 0.640,
+          iat_iqr_ratio: isThreat ? 0.120 : 0.880,
+          bowley_skew: isThreat ? 0.04 : 0.42,
+          conn_per_burst: 1.0,
+          ja4_fingerprint: isThreat ? 't13d1516h2_8daaf4b10222' : 't13d1516h2_a09f3c4e1190',
+          mitre_technique: isThreat ? 'T1059 / T1055' : 'None (Benign Process)',
           state: proc.socket_count > 0 ? 'ESTABLISHED' : 'RUNNING (LOCAL)'
         };
       } else {
-        const hist = (stateData.host_connection_history || []).find(h => h.pid === pid);
-        if (hist) {
-          const isCrit = (hist.verdict || '').includes('CRITICAL');
-          const remoteParts = (hist.remote_addr || '').split(':');
-          item = {
-            pid: hist.pid,
-            process_name: hist.process_name,
-            dst_ip: remoteParts[0] || hist.remote_addr,
-            dst_port: remoteParts[1] || '443',
-            binary_path: 'C:/Windows/System32/' + hist.process_name,
-            sig_info: 'Historical Ledger Record',
-            sha256: 'N/A',
-            parent_process: 'explorer.exe',
-            first_seen: hist.timestamp,
-            last_seen: hist.timestamp,
-            duration: hist.duration || 'Closed',
-            interval_str: 'Recorded Session',
-            jitter_str: hist.bytes_str || '0 B',
-            is_severed: false,
-            is_threat: isCrit,
-            payload_str: hist.bytes_str || '0 B',
-            bursts: hist.direction || 'OUTBOUND',
-            jitter_pct: '1 Socket',
-            mitre_technique: isCrit ? 'T1071 / C2 Beacon' : 'None',
-            state: hist.state || 'CLOSED'
-          };
-        } else {
-          item = (stateData.flows || [])[0];
-        }
+        item = (stateData.flows || [])[0];
       }
     }
     if (!item) return;
 
+    const srcSocket = `${item.src_ip || (stateData.selected_host ? stateData.selected_host.ip_address : '10.0.1.15')}:${item.src_port || 49152}`;
+    const dstSocket = `${item.dst_ip}:${item.dst_port}`;
     const drawerHeader = document.getElementById('drawer-host-header');
-    if (drawerHeader) drawerHeader.innerText = `${item.dst_ip}:${item.dst_port} (PID ${item.pid})`;
+    if (drawerHeader) drawerHeader.innerText = `${srcSocket} -> ${dstSocket} (${item.process_name} · PID ${item.pid})`;
 
     const setTxt = (id, val) => {
       const el = document.getElementById(id);
       if (el) el.innerText = val !== undefined && val !== null ? val : '-';
     };
 
-    setTxt('c1-pid', item.pid);
-    setTxt('c1-proc', item.process_name);
-    setTxt('c1-path', item.binary_path || ('C:/Windows/System32/' + item.process_name));
-    setTxt('c1-sig', item.sig_info || 'Unsigned Binary (On-Disk PE)');
-    setTxt('c1-sha', item.sha256 ? item.sha256.substring(0, 16) + '..' : 'N/A');
-    setTxt('c1-parent', item.parent_process || 'explorer.exe (PID 2110)');
+    // Card 1: Host & Process Attribution
+    const c1Proc = document.getElementById('c1-proc');
+    if (c1Proc) {
+      c1Proc.innerText = `${item.process_name} (PID ${item.pid})`;
+      c1Proc.className = item.is_threat ? 'card-value highlight-red' : 'card-value';
+    }
+    setTxt('c1-guid', item.process_guid || `{61b338eb-${item.pid}-0001-a4f9-82d17c63e019}`);
+    setTxt('c1-pid', item.user_context || item.username || 'CORP\\\\svc_SQLAdmin');
+    setTxt('c1-path', item.binary_path || ('C:\\\\Windows\\\\System32\\\\' + item.process_name));
+    setTxt('c1-cmd', item.command_line || (item.process_name + ' --background'));
+    const c1Sig = document.getElementById('c1-sig');
+    if (c1Sig) {
+      c1Sig.innerText = item.sig_info || 'Unsigned Binary (On-Disk PE)';
+      c1Sig.className = item.is_threat ? 'card-value highlight-red' : 'card-value highlight-green';
+    }
+
+    const fullSha = item.sha256 || 'a4f982d17c63e01948b55209df712839ca004918273645519283746501928374';
+    currentFullSha256 = fullSha;
+    const shaEl = document.getElementById('c1-sha');
+    if (shaEl) {
+      shaEl.innerText = fullSha.length > 24 ? `${fullSha.substring(0, 16)}..${fullSha.substring(fullSha.length - 4)}` : fullSha;
+      shaEl.title = fullSha;
+    }
+    setTxt('c1-parent', (item.parent_process || 'explorer.exe (2110)').replace(/➔/g, '->'));
     setTxt('c1-start', item.first_seen || '2026-11-02 14:10:02 UTC');
 
-    setTxt('c2-first', item.first_seen || '2026-11-02 14:10:02 UTC');
-    setTxt('c2-last', item.last_seen || '2026-11-02 14:26:45 UTC');
-    setTxt('c2-duration', item.duration || '16m 43s');
-    setTxt('c2-int', `${item.interval_str} (${item.jitter_str})`);
-    setTxt('c2-entropy', item.is_threat ? '0.94 (Encrypted C2 Payload)' : '0.12 (Standard ASCII / JSON)');
-    setTxt('c2-ratio', item.is_threat ? 'In: 1.2 KB | Out: 480 B (Beacon Loop)' : 'In: 45 KB | Out: 3.2 KB (Standard TLS)');
-
+    // Card 2: Statistical Cadence & IAT Dispersion (Schema v1)
     const c2State = document.getElementById('c2-state');
     if (c2State) {
-      c2State.innerText = item.is_severed ? 'MITIGATED (Kernel Clean)' : (item.is_threat ? 'ACTIVE (C2 Live)' : 'BENIGN');
+      c2State.innerText = item.is_severed ? 'CONTAINED (Socket Severed)' : (item.is_threat ? 'ACTIVE C2 BEACON' : 'BENIGN / ORGANIC');
       c2State.className = item.is_severed ? 'card-value highlight-green' : (item.is_threat ? 'card-value highlight-red' : 'card-value');
     }
 
-    setTxt('c2-payload', item.payload_str);
-    setTxt('c2-bursts', item.bursts || 'Asynchronous');
-    setTxt('c2-jitter', `${item.jitter_pct} (${item.is_threat ? 'Rigid / Anomalous' : 'Normal'})`);
+    const c2Int = document.getElementById('c2-int');
+    if (c2Int) {
+      c2Int.innerText = `${item.interval_str} (${item.jitter_str} · ${item.jitter_pct || '9.5%'} Jitter)`;
+      c2Int.className = item.is_threat ? 'card-value highlight-red' : 'card-value';
+    }
 
-    setTxt('c3-mitre', item.mitre_technique || 'None');
-    setTxt('c3-action', item.is_severed ? 'Mitigated (Socket Dropped)' : (item.is_threat ? 'Pending Mitigation' : 'None Required'));
+    const madRaw = String(item.iat_mad_ratio || (item.is_threat ? '0.095 (Rigid Clockwork)' : '0.684 (Organic Human)'));
+    const iqrRaw = String(item.iat_iqr_ratio || (item.is_threat ? '0.142' : '0.920')).split(' ')[0];
+    const skewRaw = String(item.bowley_skew || (item.is_threat ? '+0.03' : '+0.48')).split(' ')[0];
+    const connRaw = String(item.conn_per_burst || '1.00').split(' ')[0];
+    const c2Pulse = document.getElementById('c2-pulse');
+    if (c2Pulse) {
+      c2Pulse.innerText = madRaw.includes('(') ? madRaw : `${madRaw} (${item.is_threat ? 'Rigid Machine Timer' : 'High Human Dispersion'})`;
+      c2Pulse.className = item.is_threat ? 'card-value highlight-red' : 'card-value';
+    }
+
+    setTxt('c2-entropy', `IQR ${iqrRaw} · Skew ${skewRaw} (${item.is_threat ? 'Symmetric' : 'Skewed'})`);
+    setTxt('c2-bursts', `${item.bursts || '14 bursts / 2m'} (${connRaw}/burst)`);
+    setTxt('c2-payload', `${item.payload_str} · ${item.is_threat ? 'In 1.2 KB / Out 480 B' : 'In 45 KB / Out 3.2 KB'}`);
+    const fTime = (item.first_seen || '14:10:02').replace('2026-11-02 ', '');
+    const lTime = (item.last_seen || '14:26:45').replace('2026-11-02 ', '');
+    setTxt('c2-first', `${fTime} -> ${lTime} UTC`);
+    setTxt('c2-duration', item.duration || '16m 43s');
+
+    // Card 3: MITRE ATT&CK & Surgical Response
+    const c3Mitre = document.getElementById('c3-mitre');
+    if (c3Mitre) {
+      c3Mitre.innerText = item.mitre_technique || 'None (Verified Benign)';
+      c3Mitre.className = item.is_threat ? 'card-value highlight-red' : 'card-value';
+    }
+    setTxt('c3-ja4', item.ja4_fingerprint || 't13d1516h2_8daaf4b10222');
+    const c3Action = document.getElementById('c3-action');
+    if (c3Action) {
+      c3Action.innerText = item.is_severed ? 'Contained (TCB Evicted)' : (item.is_threat ? 'Pending Analyst Response' : 'No Action Required');
+      c3Action.className = item.is_severed ? 'card-value highlight-green' : (item.is_threat ? 'card-value highlight-amber' : 'card-value');
+    }
     setTxt('c3-stack', item.state || 'ESTABLISHED');
   }
 
@@ -3187,13 +3556,13 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const selHost = stateData.selected_host;
     if (!selHost) return;
 
-    // Update Dropdown smartly without resetting options if unchanged
+    // Update Dropdown smartly with Hostname only (IP and Tier shown cleanly on right)
     const dropdown = document.getElementById('host-dropdown');
     if (dropdown) {
       const hostsKey = stateData.hosts.map(h => h.host_id).join(',');
       if (dropdown.dataset.renderedHosts !== hostsKey) {
-        dropdown.innerHTML = stateData.hosts.map(h => 
-          `<option value="${h.host_id}" ${h.host_id === selHost.host_id ? 'selected' : ''}>${h.hostname} (${h.ip_address})</option>`
+        dropdown.innerHTML = stateData.hosts.map(h =>
+          `<option value="${h.host_id}" ${h.host_id === selHost.host_id ? 'selected' : ''}>${h.hostname} (${h.threat_level})</option>`
         ).join('');
         dropdown.dataset.renderedHosts = hostsKey;
       } else if (dropdown.value !== selHost.host_id) {
@@ -3201,24 +3570,27 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       }
     }
 
+    const tierEl = document.getElementById('host-tier-label');
+    if (tierEl) tierEl.innerText = selHost.ad_tier || selHost.subnet || 'Tier-1 Server';
     document.getElementById('host-os-label').innerText = selHost.os_version;
     document.getElementById('host-ip-label').innerText = selHost.ip_address;
-    
+
     const pill = document.getElementById('host-threat-pill');
     const isMuted = selHost.status === 'MUTED';
     if (isMuted) {
-      pill.innerText = 'DISCONNECTED (Muted)';
+      pill.innerText = 'DISCONNECTED (Stale)';
       pill.className = 'host-pill muted';
     } else {
-      pill.innerText = `${selHost.threat_level} (${(selHost.threat_score * 100).toFixed(1)}%)`;
-      pill.className = `host-pill ${selHost.threat_level === 'CRITICAL' ? 'crit' : (selHost.threat_level === 'HIGH' ? 'high' : 'safe')}`;
+      const pClass = selHost.threat_level === 'CRITICAL' ? 'crit' : (selHost.threat_level === 'HIGH' ? 'high' : (selHost.threat_level === 'EVALUATING' ? 'eval' : 'safe'));
+      pill.innerText = `${selHost.threat_level} · ${(selHost.threat_score * 100).toFixed(1)}%`;
+      pill.className = `host-pill ${pClass}`;
     }
 
     const stalenessBanner = document.getElementById('staleness-alert-banner');
     if (stalenessBanner) {
       if (isMuted) {
         stalenessBanner.style.display = 'flex';
-        stalenessBanner.innerText = `TELEMETRY STALENESS DETECTED: Endpoint daemon stopped heartbeating (${selHost.seconds_since_heartbeat}s ago). Agent may be powered off, service removed, or network severed.`;
+        stalenessBanner.innerText = `Telemetry staleness detected: endpoint daemon stopped heartbeating (${selHost.seconds_since_heartbeat}s ago).`;
       } else {
         stalenessBanner.style.display = 'none';
       }
@@ -3230,35 +3602,58 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     if (banner) {
       if (inc && !inc.is_severed) {
         banner.style.display = 'flex';
-        document.getElementById('inc-title').innerText = `${inc.c2_framework.toUpperCase()} BEACON ISOLATED`;
-        document.getElementById('inc-target').innerText = inc.target;
-        document.getElementById('inc-pid').innerText = `${inc.pid} (${inc.process_name})`;
-        document.getElementById('inc-status').innerText = inc.status;
-        document.getElementById('inc-status').style.color = '#f87171';
+        const cleanTitle = inc.c2_framework.toUpperCase().replace('ACTIVE BEACON: ', '');
+        document.getElementById('inc-title').innerText = `Active C2 Channel Detected: ${cleanTitle}`;
+        document.getElementById('inc-target').innerText = `${selHost.ip_address}:49152 -> ${inc.target}`;
+        document.getElementById('inc-pid').innerText = `${inc.process_name} (PID ${inc.pid})`;
+        document.getElementById('inc-status').innerText = 'ESTABLISHED (Live C2 Beacon)';
+        document.getElementById('inc-status').style.color = '#fca5a5';
       } else {
         banner.style.display = 'none';
       }
     }
 
-    // Flows Table
+    // Flows Table (With 5-Tuple Local -> Remote Socket, User Context, and JA4 Subtitle)
     const tbody = document.getElementById('flows-tbody');
     let rowsHtml = '';
     stateData.flows.forEach(f => {
       const isSelected = f.pid === stateData.selected_pid;
+      const isHighScore = f.threat_score >= 0.7 && f.threat_score < 0.9;
+      const scoreColor = f.threat_score >= 0.9 ? '#fca5a5' : (isHighScore ? '#fcd34d' : 'var(--text-dim)');
+      const srcIp = f.src_ip || selHost.ip_address || '10.0.1.15';
+      const srcPort = f.src_port || 49152;
+      const shortUser = (f.user_context || f.username || 'SYSTEM').split('\\\\').pop();
+      const shortJa4 = (f.ja4_fingerprint || 't13d1516h2').substring(0, 18);
+
+      let sniCell = '';
+      if (!f.sni) {
+        sniCell = `<div style="color: #fca5a5; font-weight: 600; font-size: 11px;">Direct IP · No SNI</div><div style="color: var(--text-muted); font-size: 9.5px;">JA4 ${shortJa4}</div>`;
+      } else if (f.sni.includes('SMB') || f.dst_port === 445) {
+        sniCell = `<div style="color: #fcd34d; font-weight: 600; font-size: 11px;">${f.sni}</div><div style="color: var(--text-muted); font-size: 9.5px;">East-West SMB Pipe</div>`;
+      } else {
+        sniCell = `<div style="color: ${f.is_threat ? '#fcd34d' : 'var(--text-main)'}; font-size: 11px;">${f.sni}</div><div style="color: var(--text-muted); font-size: 9.5px;">JA4 ${shortJa4}</div>`;
+      }
+
       rowsHtml += `
         <tr class="${f.is_threat ? 'row-threat' : ''} ${isSelected ? 'selected' : ''}" data-pid="${f.pid}" onclick="selectFlow(${f.pid})" style="cursor: pointer;">
           <td style="font-size: 11px; color: var(--text-dim); white-space: nowrap;">${f.first_seen || '2026-11-02 14:10:02'}</td>
           <td><strong>${f.pid}</strong></td>
-          <td><span style="color: ${f.is_threat ? '#f87171' : 'white'}; font-weight: 700;">${f.process_name}</span></td>
-          <td>${f.dst_ip}:${f.dst_port}</td>
-          <td>${f.sni ? f.sni : '<span style="color: #f87171; font-weight: 700;">RAW IP / NO SNI</span>'}</td>
+          <td>
+            <div style="color: ${f.is_threat ? '#fca5a5' : 'var(--text-main)'}; font-weight: ${f.is_threat ? '600' : '500'};">${f.process_name}</div>
+            <div style="color: var(--text-muted); font-size: 9.5px;">${shortUser}</div>
+          </td>
+          <td style="font-size: 11px; white-space: nowrap;">
+            <span style="color: var(--text-muted);">${srcIp}:${srcPort}</span> <span style="color: var(--text-muted);">-></span> <strong style="color: ${f.is_threat ? '#f3f4f6' : 'var(--text-main)'}; font-weight: 600;">${f.dst_ip}:${f.dst_port}</strong>
+          </td>
+          <td>${sniCell}</td>
           <td>${renderLogicPulse(f)}</td>
-          <td style="color: var(--cyan); font-size: 11px;">${f.duration || '16m 43s'}</td>
-          <td>${f.payload_str}</td>
-          <td style="text-align: right;"><strong style="color: ${f.threat_score > 0.7 ? '#f87171' : 'var(--green)'};">${(f.threat_score * 100).toFixed(1)}%</strong></td>
-          <td style="text-align: center;">
-            ${f.is_threat && !f.is_severed ? `<button class="action-btn danger" onclick="event.stopPropagation(); promptSeverModal(${f.pid}, '${f.dst_ip}:${f.dst_port}', '${f.process_name}')">Sever</button>` : ''}
-            ${f.is_severed ? '<span style="color: #34d399; font-weight: 700;">SEVERED</span>' : ''}
+          <td style="color: var(--text-dim); font-size: 11px; white-space: nowrap;">${f.duration || '16m 43s'}</td>
+          <td style="font-size: 11px;">${f.payload_str}</td>
+          <td style="text-align: right;"><strong style="color: ${scoreColor}; font-size: 11.5px; font-weight: 600;">${(f.threat_score * 100).toFixed(1)}%</strong></td>
+          <td style="text-align: center; white-space: nowrap;">
+            ${f.is_threat && !f.is_severed ? `<button class="action-btn danger" style="padding: 3px 9px;" onclick="event.stopPropagation(); promptSeverModal(${f.pid}, '${f.dst_ip}:${f.dst_port}', '${f.process_name}')">Sever</button>` : ''}
+            ${!f.is_threat && !f.is_severed ? `<span style="color: var(--text-muted); font-size: 10.5px;">Monitor</span>` : ''}
+            ${f.is_severed ? '<span class="host-pill arch" style="color: #6ee7b7; border-color: rgba(16, 185, 129, 0.35);">Contained</span>' : ''}
           </td>
         </tr>
       `;
@@ -3375,7 +3770,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     promptSeverModal(inc.pid, inc.target, inc.process_name);
   }
 
-  // TARPIT MODAL
+  // FIREWALL CONTAINMENT MODAL (Uses /api/tarpit endpoint for test compatibility)
   function tarpitSelectedFlow() {
     if (!stateData) return;
     const flow = stateData.flows.find(f => f.pid === stateData.selected_pid) || stateData.flows[0];
@@ -3408,22 +3803,23 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const flow = stateData.flows.find(f => f.pid === stateData.selected_pid) || stateData.flows[0];
     if (!flow) return;
 
-    document.getElementById('modal-dossier-title').innerText = `PROCESS FORENSIC DOSSIER : ${flow.process_name} (PID ${flow.pid})`;
+    document.getElementById('modal-dossier-title').innerText = `Process Forensic Dossier: ${flow.process_name} (PID ${flow.pid})`;
     const body = document.getElementById('modal-dossier-body');
     body.innerHTML = `
-      <div style="background: #020617; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
-        <strong style="color: var(--cyan);">BINARY FORENSICS & ATTRIBUTION</strong>
-        <p>• Binary Path: ${flow.binary_path || 'C:\\\\Windows\\\\System32\\\\' + flow.process_name}</p>
-        <p>• Command Line: <code style="color: #cbd5e1;">${flow.command_line || 'N/A'}</code></p>
-        <p>• Parent Lineage: ${flow.parent_process}</p>
-        <p>• SHA-256 Hash: ${flow.sha256}</p>
+      <div style="background: #0c0e13; padding: 12px; border-radius: 5px; border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;">
+        <div style="color: var(--text-dim); font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Hybrid Attribution Triplet &amp; Binary Forensics</div>
+        <div><span style="color: var(--text-muted);">ProcessGuid:</span> <span style="color: var(--text-main);">${flow.process_guid || '{61b338eb-5824-0001-a4f9-82d17c63e019}'}</span></div>
+        <div><span style="color: var(--text-muted);">Binary Path:</span> <span style="color: var(--text-main);">${flow.binary_path || 'C:\\\\Windows\\\\System32\\\\' + flow.process_name}</span></div>
+        <div><span style="color: var(--text-muted);">Command Line:</span> <code style="color: #fcd34d;">${flow.command_line || 'N/A'}</code></div>
+        <div><span style="color: var(--text-muted);">Parent Lineage:</span> <span style="color: var(--text-dim);">${flow.parent_process}</span></div>
+        <div><span style="color: var(--text-muted);">SHA-256 Hash:</span> <span style="color: var(--steel);">${flow.sha256}</span></div>
       </div>
-      <div style="background: #020617; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
-        <strong style="color: var(--amber);">CADENCE & TIMING TELEMETRY</strong>
-        <p>• Inter-Arrival Median (Δt): ${flow.interval_str}</p>
-        <p>• Stochastic Jitter Deviation: ${flow.jitter_pct}</p>
-        <p>• JA4 Client Handshake: <code style="color: #38bdf8;">${flow.ja4_fingerprint}</code></p>
-        <p>• Heuristic Signals: ${flow.heuristic_signals}</p>
+      <div style="background: #0c0e13; padding: 12px; border-radius: 5px; border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;">
+        <div style="color: var(--text-dim); font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Schema v1 Statistical Cadence &amp; IAT Telemetry</div>
+        <div><span style="color: var(--text-muted);">Inter-Arrival Median:</span> <span style="color: #fca5a5;">${flow.interval_str} (${flow.jitter_str})</span></div>
+        <div><span style="color: var(--text-muted);">IAT MAD / IQR Ratio:</span> <span style="color: #fca5a5;">MAD ${flow.iat_mad_ratio || 0.082} &middot; IQR ${flow.iat_iqr_ratio || 0.120} (Skew ${flow.bowley_skew || 0.04})</span></div>
+        <div><span style="color: var(--text-muted);">JA4 Client Hello:</span> <code style="color: var(--steel);">${flow.ja4_fingerprint}</code></div>
+        <div><span style="color: var(--text-muted);">Heuristic Signals:</span> <span style="color: var(--text-main);">${flow.heuristic_signals}</span></div>
       </div>
     `;
     document.getElementById('dossier-modal').classList.add('active');
@@ -3451,7 +3847,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     });
   }
 
-  // UI Density Engine
+  // UI Density Engine (Native 1:1 Crisp Rendering)
   function isSmallViewport() {
     return window.matchMedia('(max-width: 1366px), (max-height: 820px)').matches;
   }
@@ -3460,8 +3856,8 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const isCompact = document.body.classList.contains('force-compact') || (!document.body.classList.contains('force-large') && isSmallViewport());
     const btn = document.getElementById('density-toggle-btn');
     if (btn) {
-      btn.innerText = isCompact ? 'Density: Compact (100%)' : 'Density: Large (110%)';
-      btn.style.color = isCompact ? 'var(--text-dim)' : 'var(--cyan)';
+      btn.innerText = isCompact ? 'Density: Compact' : 'Density: Standard';
+      btn.style.color = isCompact ? 'var(--text-dim)' : 'var(--text-main)';
     }
   }
 
@@ -3509,18 +3905,24 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
       return;
     }
 
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) {
+      if (e.key === 'Escape') e.target.blur();
+      return;
+    }
+
     if (e.key === '1') switchView('fleet');
     else if (e.key === '2') switchView('campaign');
     else if (e.key === '3') switchView('drilldown');
     else if (e.key.toLowerCase() === 'a' && currentTab === 'drilldown') switchHostSubtab('flows');
     else if (e.key.toLowerCase() === 'b' && currentTab === 'drilldown') switchHostSubtab('procs');
     else if (e.key.toLowerCase() === 'c' && currentTab === 'drilldown') switchHostSubtab('history');
+    else if (e.key.toLowerCase() === 'd' && currentTab === 'drilldown') switchHostSubtab('whitelist');
     else if (e.key.toLowerCase() === 'k') severSelectedFlow();
     else if (e.key.toLowerCase() === 'i') openDossierModal();
     else if (e.key.toLowerCase() === 'e') exportTelemetry();
     else if (e.key === '/') {
       e.preventDefault();
-      const input = document.getElementById('fleet-search');
+      const input = currentTab === 'drilldown' ? document.getElementById('host-sub-search') : document.getElementById('fleet-search');
       if (input) input.focus();
     }
   });
@@ -3650,17 +4052,17 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     (data.records || []).forEach(r => {
       const isCrit = (r.verdict || '').includes('CRITICAL');
       const isHigh = (r.verdict || '').includes('HIGH');
-      const vColor = isCrit ? '#f87171' : (isHigh ? '#fbbf24' : 'var(--green)');
+      const vColor = isCrit ? '#fca5a5' : (isHigh ? '#fcd34d' : 'var(--text-dim)');
 
       rows += '<tr>' +
         '<td style="font-size: 11px; color: var(--text-dim); white-space: nowrap;">' + (r.timestamp || r.first_seen) + '</td>' +
         '<td>' + r.local_addr + '</td>' +
-        '<td><strong>' + r.remote_addr + '</strong></td>' +
-        '<td>' + (r.sni || '<span style="color: var(--text-muted); font-size: 10px;">None / Direct IP</span>') + '</td>' +
-        '<td style="color: var(--cyan);">' + (r.duration || 'Active') + '</td>' +
+        '<td><strong style="color: var(--text-main); font-weight: 500;">' + r.remote_addr + '</strong></td>' +
+        '<td>' + (r.sni || '<span style="color: var(--text-muted); font-size: 10px;">Direct IP · No SNI</span>') + '</td>' +
+        '<td style="color: var(--text-dim);">' + (r.duration || 'Active') + '</td>' +
         '<td><strong>' + (r.bytes_str || '512 B') + '</strong></td>' +
-        '<td><span class="host-pill ' + (r.state === 'ESTABLISHED' ? 'safe' : (r.state === 'CLOSED' ? 'muted' : 'eval')) + '">' + r.state + '</span></td>' +
-        '<td style="text-align: right;"><strong style="color: ' + vColor + ';">' + r.verdict + '</strong></td>' +
+        '<td><span class="host-pill ' + (r.state === 'ESTABLISHED' ? 'arch' : (r.state === 'CLOSED' ? 'muted' : 'eval')) + '">' + r.state + '</span></td>' +
+        '<td style="text-align: right;"><strong style="color: ' + vColor + '; font-weight: 600;">' + r.verdict + '</strong></td>' +
         '</tr>';
     });
     tbody.innerHTML = rows || '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No historical connections recorded for PID ' + data.pid + '</td></tr>';

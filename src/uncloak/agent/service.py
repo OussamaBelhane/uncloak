@@ -24,6 +24,14 @@ import psutil
 from uncloak.attribution.identity import classify_path
 from uncloak.attribution.trust import verify_authenticode
 from uncloak.core.models import FlowSession
+from uncloak.export.siem import (
+    EVENT_ID_C2_DETECTED,
+    EVENT_ID_CONTAINMENT_EXECUTED,
+    append_ndjson_alert,
+    build_ocsf_detection_event,
+    emit_windows_event_log,
+    render_service_console_preview,
+)
 from uncloak.mitigation.eviction import sever_tcp_connection
 from uncloak.mitigation.firewall import block_application_destination
 
@@ -240,6 +248,109 @@ class UncloakAgentService:
             )
             block_application_destination(rule_name, program_path, remote_ip)
 
+    def emit_siem_cycle(
+        self,
+        ndjson_path: str = "uncloak_alerts.ndjson",
+        include_sample_detections: bool = False,
+    ) -> tuple[list[dict[str, Any]], str, list[tuple[int, bool, str]]]:
+        """
+        Emits structured OCSF v1.1.0 NDJSON events and Windows Event Log entries
+        (Event ID 9001 C2 Detection, Event ID 9002 Containment Executed) for local SIEM agents
+        (Wazuh, Splunk Universal Forwarder, Elastic Winlogbeat) without opening any listening UI ports.
+        """
+        events: list[dict[str, Any]] = []
+        win_statuses: list[tuple[int, bool, str]] = []
+
+        if include_sample_detections:
+            ev_detect = build_ocsf_detection_event(
+                event_id=EVENT_ID_C2_DETECTED,
+                hostname=self.hostname,
+                src_ip=self.ip_address,
+                src_port=49152,
+                dst_ip="193.26.158.114",
+                dst_port=443,
+                pid=5824,
+                process_name="update.exe",
+                process_path=r"C:\Users\Target\AppData\Roaming\update.exe",
+                process_guid="{8f3a91c2-4d11-672a-0100-0000000016c0}",
+                sha256="a4f982d17c63e01948b55209df712839ca004918273645519283746501928374",
+                user_context=r"CORP\jdoe (Medium Integrity)",
+                is_signed=False,
+                threat_score=0.987,
+                severity_label="CRITICAL",
+                c2_framework="Sliver mTLS / Raw IP C2",
+                mitre_technique="T1071.001 (Web Protocols) / T1573.002",
+                features_v1={
+                    "n_bursts": 14,
+                    "iat_median": 8.4,
+                    "iat_mad_ratio": 0.095,
+                    "iat_iqr_ratio": 0.142,
+                    "iat_bowley_skew": 0.03,
+                    "size_out_median": 512.0,
+                    "size_in_median": 1280.0,
+                    "size_mad_ratio": 0.04,
+                    "conn_per_burst": 1.0,
+                    "raw_ip_flag": 1,
+                    "proc_signed": 0,
+                    "proc_path_class": 1,
+                },
+                reasons=[
+                    "Rigid Clockwork IAT Dispersion (MAD=0.095, Median=8.4s)",
+                    "Direct IP Egress Without Prior DNS Lookup (raw_ip_flag=1)",
+                    "Unsigned PE Binary Executed on Disk (WinVerifyTrust Fail)",
+                ],
+                containment_action="SetTcpEntry(DELETE_TCB) Pending SOAR Approval",
+            )
+            ev_contain = build_ocsf_detection_event(
+                event_id=EVENT_ID_CONTAINMENT_EXECUTED,
+                hostname=self.hostname,
+                src_ip=self.ip_address,
+                src_port=51204,
+                dst_ip="10.0.3.44",
+                dst_port=445,
+                pid=3104,
+                process_name="wmiprvse.exe",
+                process_path=r"C:\Windows\System32\wbem\WmiPrvSE.exe",
+                process_guid="{8f3a91c2-500a-672a-0300-000000000c20}",
+                sha256="4c92a77b128492a0038f91827364551290837465192837465192837465001122",
+                user_context=r"NT AUTHORITY\NETWORK SERVICE",
+                is_signed=True,
+                threat_score=0.892,
+                severity_label="HIGH",
+                c2_framework="East-West Lateral Pivot / SMB Beacon",
+                mitre_technique="T1021.002 (SMB/Admin Shares)",
+                features_v1={
+                    "n_bursts": 16,
+                    "iat_median": 4.0,
+                    "iat_mad_ratio": 0.050,
+                    "iat_iqr_ratio": 0.075,
+                    "iat_bowley_skew": 0.01,
+                    "size_out_median": 256.0,
+                    "size_in_median": 256.0,
+                    "size_mad_ratio": 0.02,
+                    "conn_per_burst": 1.0,
+                    "raw_ip_flag": 1,
+                    "proc_signed": 1,
+                    "proc_path_class": 0,
+                },
+                reasons=[
+                    "Rigid Clockwork IAT Dispersion (MAD=0.050, Median=4.0s)",
+                    "East-West SMB Port 445 Periodic Polling",
+                ],
+                containment_action="SetTcpEntry(DELETE_TCB) + netsh advfirewall Outbound Block Enforced",
+            )
+            events.extend([ev_detect, ev_contain])
+
+        out_path = ndjson_path
+        for ev in events:
+            out_path = append_ndjson_alert(ev, log_path=ndjson_path)
+            eid = ev["metadata"]["windows_event_id"]
+            sev = ev["severity"]
+            ok, msg = emit_windows_event_log(eid, sev, ev["message"])
+            win_statuses.append((eid, ok, msg))
+
+        return events, out_path, win_statuses
+
     def run_local_tui(self) -> int:
         """Launches the Rich terminal cockpit locally for physical break-glass triage."""
         from uncloak.ui.cockpit import run_cockpit
@@ -321,7 +432,9 @@ def main(args: Optional[list[str]] = None) -> int:
     parser.add_argument("--install", action="store_true", help="Install agent as a silent Windows boot service (SYSTEM)")
     parser.add_argument("--uninstall", action="store_true", help="Remove agent from Windows startup")
     parser.add_argument("--status", action="store_true", help="Query Windows startup service registration status")
-    parser.add_argument("--manager", default="http://127.0.0.1:8443", help="Central Fleet Manager URL")
+    parser.add_argument("--manager", default="http://127.0.0.1:8830", help="Central Fleet Manager URL (optional)")
+    parser.add_argument("--once", action="store_true", help="Run a single SIEM OCSF/EventLog emission check and exit")
+    parser.add_argument("--siem-out", default="uncloak_alerts.ndjson", help="Path to write OCSF v1.1.0 NDJSON SIEM log")
     
     parsed = parser.parse_args(args)
 
@@ -334,9 +447,20 @@ def main(args: Optional[list[str]] = None) -> int:
         return 0
 
     agent = UncloakAgentService(manager_url=parsed.manager)
-    print(f"[*] Uncloak Silent Endpoint Agent initialized on [{agent.hostname}]")
-    print(f"[*] Connecting to Manager at {agent.manager_url} (Heartbeat: 15s)...")
-    print("[*] Taskbar Visibility: Headless (0% taskbar, 0% system tray)")
+    if parsed.once:
+        from rich.console import Console
+        console = Console(color_system="truecolor")
+        events, out_path, statuses = agent.emit_siem_cycle(
+            ndjson_path=parsed.siem_out,
+            include_sample_detections=True,
+        )
+        render_service_console_preview(console, events, out_path, statuses)
+        return 0
+
+    print(f"[*] Uncloak Headless Endpoint Sensor initialized on [{agent.hostname}]")
+    print(f"[*] SIEM Sink Active: Windows Event Log (EID 9001/9002) + OCSF NDJSON ({parsed.siem_out})")
+    print(f"[*] Optional Fleet Heartbeat Target: {agent.manager_url} (Heartbeat: 15s)")
+    print("[*] Attack Surface: Zero UI ports opened on endpoint")
     agent.start(daemon=False)
     return 0
 

@@ -13,7 +13,119 @@ import psutil
 from rich.console import Console
 from rich.live import Live
 
+from uncloak.attribution.identity import classify_path, generate_process_guid
+from uncloak.attribution.trust import verify_authenticode
 from uncloak.ui.layout import CockpitState, FlowEntry, build_cockpit_layout, get_visible_flows
+
+
+def collect_live_host_flows(limit: int = 32) -> list[FlowEntry]:
+    """Collects genuine live outbound ESTABLISHED TCP flows attributed to Windows processes."""
+    import hashlib
+    flows: list[FlowEntry] = []
+    try:
+        conns = psutil.net_connections(kind="tcp")
+    except Exception:
+        return flows
+
+    seen = set()
+    idx = 0
+    for c in conns:
+        if c.status != "ESTABLISHED" or not c.raddr or c.raddr.ip in ("127.0.0.1", "::1"):
+            continue
+        pid = c.pid or 0
+        key = (pid, c.raddr.ip, c.raddr.port)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        proc_name = "System"
+        exe_path = ""
+        cmd_line = ""
+        user_ctx = "NT AUTHORITY\\SYSTEM"
+        create_time_str = time.strftime("%Y-%m-%d %H:%M:%S")
+        if pid > 0:
+            try:
+                p = psutil.Process(pid)
+                proc_name = p.name()
+                exe_path = p.exe() or ""
+                cmd_line = " ".join(p.cmdline())[:180]
+                user_ctx = p.username() or "SYSTEM"
+                create_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(p.create_time()))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        is_signed, sig_details = verify_authenticode(exe_path) if exe_path else (True, "Kernel / Protected Process")
+        path_tier = classify_path(exe_path)
+
+        sha_digest = "Unresolved (Kernel / AccessDenied)"
+        if exe_path and os.path.isfile(exe_path):
+            try:
+                with open(exe_path, "rb") as fh:
+                    sha_digest = hashlib.sha256(fh.read(65536)).hexdigest()
+            except Exception:
+                pass
+
+        # Real trust heuristics for live unbuffered socket inspection
+        score = 0.05
+        is_threat = False
+        label = "SAFE"
+        reasons = ["Live Kernel Socket Snapshot (Collect >=8 bursts for IAT MAD)"]
+        if not is_signed and path_tier in (1, 2):
+            score = 0.62
+            label = "EVAL"
+            reasons = ["Unsigned Userland PE with External Socket"]
+        elif proc_name.lower() in ("powershell.exe", "cmd.exe", "mshta.exe", "rundll32.exe") and c.raddr.ip not in ("127.0.0.1", "::1"):
+            score = 0.78
+            is_threat = True
+            label = "HIGH"
+            reasons = ["LOLBin Process with Active External TCP Session"]
+
+        idx += 1
+        flows.append(
+            FlowEntry(
+                flow_id=f"live-{idx}",
+                pid=pid,
+                process_name=proc_name,
+                is_signed=is_signed,
+                src_ip=c.laddr.ip,
+                src_port=c.laddr.port,
+                dst_ip=c.raddr.ip,
+                dst_port=c.raddr.port,
+                sni="",
+                interval_str="Live",
+                sparkline="──    ──",
+                jitter_str="Sampling",
+                jitter_pct="N/A",
+                payload_str="Stream",
+                threat_score=score,
+                threat_label=label,
+                is_threat=is_threat,
+                c2_framework="Monitoring IAT..." if not is_threat else "LOLBin Network Activity",
+                binary_path=exe_path or "[Protected / Kernel Image]",
+                command_line=cmd_line or proc_name,
+                parent_process=f"PID {pid}",
+                sig_info=sig_details,
+                sha256=sha_digest,
+                process_guid=generate_process_guid(pid, int(time.time())),
+                ja4_fingerprint="Live Socket Inspection (Enable Npcap for JA4)",
+                heuristic_signals=" | ".join(reasons),
+                detection_reasons=" | ".join(reasons),
+                bursts="Real-Time Snapshot",
+                user_context=user_ctx,
+                is_severed=False,
+                mitre_technique="T1059 (Command Interpreter)" if is_threat else "None (Baseline Socket)",
+                state=c.status,
+                first_seen=create_time_str,
+                iat_mad_ratio="Sampling (<8 bursts)",
+                iat_iqr_ratio="Sampling",
+                bowley_skew="0.00",
+                conn_per_burst="1.00 (ESTABLISHED)",
+            )
+        )
+        if len(flows) >= limit:
+            break
+
+    return flows
 
 
 def get_demo_flows() -> list[FlowEntry]:
@@ -24,7 +136,7 @@ def get_demo_flows() -> list[FlowEntry]:
             pid=5824,
             process_name="update.exe",
             is_signed=False,
-            src_ip="10.0.0.15",
+            src_ip="10.0.1.15",
             src_port=49152,
             dst_ip="193.26.158.114",
             dst_port=443,
@@ -37,64 +149,37 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.987,
             threat_label="CRIT",
             is_threat=True,
-            c2_framework="Sliver C2",
+            c2_framework="Sliver JA4 Profile",
             binary_path=r"C:\Users\Target\AppData\Roaming\update.exe",
-            command_line=r"update.exe --c2 193.26.158.114:443 --session-id 0x882",
+            command_line=r"C:\Users\Target\AppData\Roaming\update.exe --mtls 193.26.158.114:443 --jitter 10",
             parent_process="explorer.exe (PID 2110) -> cmd.exe (PID 4920) -> update.exe (PID 5824)",
             sig_info="Unsigned Binary (On-Disk PE)",
-            sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            sha256="a4f982d17c63e01948b55209df712839ca004918273645519283746501928374",
+            process_guid="{8f3a91c2-4d11-672a-0100-0000000016c0}",
             ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
-            heuristic_signals="Beacon 0.99 │ Raw IP",
-            detection_reasons="Direct IP (No SNI) │ Static 512B Beacon",
-            bursts="14 bursts / 2m",
-            user_context=r"CORP\jdoe (Standard)",
+            heuristic_signals="MAD Ratio 0.095 │ Direct Raw IP │ Unsigned Userland PE",
+            detection_reasons="Direct IP Egress (No SNI) │ Rigid 8.4s IAT (MAD 0.095)",
+            bursts="14 bursts / 2m (182 pkts)",
+            user_context=r"CORP\jdoe (Medium Integrity)",
             is_severed=False,
-            mitre_technique="T1071.001 (HTTPS C2)",
+            mitre_technique="T1071.001 (Web Protocols) / T1090.004",
             state="ESTABLISHED",
             packets=182,
             bytes_transferred=51688,
+            first_seen="2026-11-02 14:10:02",
+            last_seen="2026-11-02 14:26:45",
+            duration="16m 43s",
+            iat_mad_ratio="0.095 (Rigid Clockwork)",
+            iat_iqr_ratio="0.142 (Low Dispersion)",
+            bowley_skew="+0.03 (Symmetric Loop)",
+            conn_per_burst="1.00 (Persistent Socket)",
         ),
         FlowEntry(
             flow_id="f2",
-            pid=6712,
-            process_name="rundll32.exe",
-            is_signed=False,
-            src_ip="10.0.0.15",
-            src_port=49210,
-            dst_ip="45.33.32.156",
-            dst_port=8443,
-            sni="cdn-azure-edge.net",
-            interval_str="15.0s",
-            sparkline="▄   ▄   ▄",
-            jitter_str="±1.1s",
-            jitter_pct="7.3%",
-            payload_str="1.2 KB",
-            threat_score=0.942,
-            threat_label="CRIT",
-            is_threat=True,
-            c2_framework="Cobalt Strike",
-            binary_path=r"C:\Windows\System32\rundll32.exe",
-            command_line=r"C:\Windows\System32\rundll32.exe C:\Users\Target\AppData\Local\Temp\nvsvc.dll,Entry",
-            parent_process="wmiprvse.exe (PID 3144) -> powershell.exe (PID 8830) -> rundll32.exe (PID 6712)",
-            sig_info="Unsigned Proxy (DLL Side-load)",
-            sha256="7c12bf9810ac9b32e144a10f8bc9910cde4279ab2281a8c3d9a102ffbc41238a",
-            ja4_fingerprint="t13d190800_261546b3f71c_f601b1a77409",
-            heuristic_signals="Beacon 0.94 │ Malleable",
-            detection_reasons="Malleable C2 Profile │ Host Header Mismatch",
-            bursts="8 bursts / 2m",
-            user_context=r"CORP\jdoe (Standard)",
-            is_severed=False,
-            mitre_technique="T1218.011 (Rundll32)",
-            state="ESTABLISHED",
-            packets=96,
-            bytes_transferred=24576,
-        ),
-        FlowEntry(
-            flow_id="f3",
             pid=8830,
             process_name="powershell.exe",
-            is_signed=False,
-            src_ip="10.0.0.15",
+            is_signed=True,
+            src_ip="10.0.1.15",
             src_port=49722,
             dst_ip="185.220.101.5",
             dst_port=443,
@@ -107,197 +192,288 @@ def get_demo_flows() -> list[FlowEntry]:
             threat_score=0.865,
             threat_label="HIGH",
             is_threat=True,
-            c2_framework="Empire C2",
+            c2_framework="Fallback Beacon (Empire JA4)",
             binary_path=r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
             command_line=r"powershell.exe -NoP -NonI -W Hidden -Enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA...",
-            parent_process="services.exe (PID 644) -> svchost.exe (PID 2023) -> powershell.exe (PID 8830)",
-            sig_info="Microsoft Windows",
+            parent_process="services.exe (PID 684) -> svchost.exe (PID 2023) -> powershell.exe (PID 8830)",
+            sig_info="Microsoft Windows (LOLBin Abuse)",
             sha256="99182abfc012781bcf4401a998bc41270ae19b88ef128456187900bba037b341",
-            ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
-            heuristic_signals="Beacon 0.99 │ Direct IP",
-            detection_reasons="Direct IP (No SNI) │ Static 768B Beacon",
-            bursts="5 bursts / 5m",
-            user_context=r"CORP\jdoe (Standard)",
+            process_guid="{8f3a91c2-4e4e-672a-0200-00000000227e}",
+            ja4_fingerprint="t13d1516h2_8daaf6152771_e5627efa2ab1",
+            heuristic_signals="MAD Ratio 0.040 │ LOLBin Network Socket │ Encoded CLI",
+            detection_reasons="LOLBin Outbound C2 │ Low-Frequency 60.0s Sleep",
+            bursts="11 bursts / 11m (45 pkts)",
+            user_context=r"CORP\jdoe (Medium Integrity)",
             is_severed=False,
-            mitre_technique="T1059.001 (PowerShell C2)",
+            mitre_technique="T1059.001 (PowerShell) / T1071.001",
             state="ESTABLISHED",
             packets=45,
             bytes_transferred=14336,
+            first_seen="2026-11-02 14:15:20",
+            last_seen="2026-11-02 14:26:20",
+            duration="11m 00s",
+            iat_mad_ratio="0.040 (Metronomic Sleep)",
+            iat_iqr_ratio="0.068 (Tight Cadence)",
+            bowley_skew="-0.01 (Uniform Timer)",
+            conn_per_burst="1.00 (Persistent Socket)",
+        ),
+        FlowEntry(
+            flow_id="f3",
+            pid=3104,
+            process_name="wmiprvse.exe",
+            is_signed=True,
+            src_ip="10.0.1.15",
+            src_port=51204,
+            dst_ip="10.0.3.44",
+            dst_port=445,
+            sni="INTERNAL SMB / WMI PIVOT",
+            interval_str="4.0s",
+            sparkline="▄ ▄ ▄ ▄",
+            jitter_str="±0.2s",
+            jitter_pct="5.0%",
+            payload_str="1.4 KB",
+            threat_score=0.794,
+            threat_label="HIGH",
+            is_threat=True,
+            c2_framework="Lateral Pivot (SMB/WMI -> WS-ENG-04)",
+            binary_path=r"C:\Windows\System32\wbem\wmiprvse.exe",
+            command_line=r"C:\Windows\system32\wbem\wmiprvse.exe -secured -Embedding",
+            parent_process="svchost.exe (PID 1024) -> wmiprvse.exe (PID 3104)",
+            sig_info="Microsoft Windows (Lateral Pivot)",
+            sha256="7c12bf9810ac9b32e144a10f8bc9910cde4279ab2281a8c3d9a102ffbc41238a",
+            process_guid="{8f3a91c2-4e08-672a-0300-000000000c20}",
+            ja4_fingerprint="SMB2_NEGOTIATE_DIALECT_0x0311_NTLM",
+            heuristic_signals="Tier-1 -> Tier-2 SMB Lateral Flow │ Post-Beacon Spawn",
+            detection_reasons="Lateral SMB/445 Movement to WS-ENG-04 (10.0.3.44)",
+            bursts="9 bursts / 12m (96 pkts)",
+            user_context=r"NT AUTHORITY\NETWORK SERVICE",
+            is_severed=False,
+            mitre_technique="T1021.002 (SMB/Admin Shares) / T1047",
+            state="ESTABLISHED",
+            packets=96,
+            bytes_transferred=24576,
+            first_seen="2026-11-02 14:14:10",
+            last_seen="2026-11-02 14:26:40",
+            duration="12m 30s",
+            iat_mad_ratio="0.073 (RPC/SMB Keepalive)",
+            iat_iqr_ratio="0.115 (Periodic Pipe)",
+            bowley_skew="+0.08 (Right-Tail Burst)",
+            conn_per_burst="1.00 (Session Multiplexed)",
         ),
         FlowEntry(
             flow_id="f4",
             pid=1024,
             process_name="teams.exe",
             is_signed=True,
-            src_ip="10.0.0.15",
+            src_ip="10.0.1.15",
             src_port=50114,
             dst_ip="52.114.63.56",
             dst_port=443,
             sni="*.teams.microsoft.com",
             interval_str="Asynch",
             sparkline="──    ──",
-            jitter_str="N/A",
-            jitter_pct="N/A",
+            jitter_str="±18.4s",
+            jitter_pct="64.2%",
             payload_str="3.9 KB",
             threat_score=0.008,
             threat_label="SAFE",
             is_threat=False,
             c2_framework=None,
-            binary_path=r"C:\Program Files\WindowsApps\teams.exe",
-            command_line=r"teams.exe --type=renderer --enable-features=WebComponents",
-            parent_process="explorer.exe (PID 2110)",
-            sig_info="Microsoft Corporation",
+            binary_path=r"C:\Program Files\WindowsApps\MSTeams\ms-teams.exe",
+            command_line=r"ms-teams.exe --type=renderer --enable-features=WebComponents",
+            parent_process="explorer.exe (PID 2110) -> teams.exe (PID 1024)",
+            sig_info="Microsoft Corporation (Authenticode Verified)",
             sha256="b148fa0172e04f9810bb4260aa781fbc02419a45610099881122334455667788",
+            process_guid="{8f3a91c2-012f-672a-0400-000000000400}",
             ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
-            heuristic_signals="Enterprise Suite Baseline",
-            detection_reasons="Valid PKI Signature │ Enterprise Allowlist",
-            bursts="Asynchronous",
-            user_context=r"CORP\jdoe (Standard)",
+            heuristic_signals="MAD Ratio 0.642 │ Enterprise Collaboration Suite",
+            detection_reasons="Valid Microsoft PKI Signature │ High Human Jitter Variance",
+            bursts="Asynchronous (1,420 pkts)",
+            user_context=r"CORP\jdoe (Medium Integrity)",
             is_severed=False,
-            mitre_technique="None (Allowlisted)",
+            mitre_technique="None (Verified Allowlist)",
             state="ESTABLISHED",
             packets=1420,
             bytes_transferred=584200,
+            first_seen="2026-11-02 08:30:15",
+            last_seen="2026-11-02 14:26:41",
+            duration="5h 56m",
+            iat_mad_ratio="0.642 (Organic Human)",
+            iat_iqr_ratio="0.890 (Wide Dispersion)",
+            bowley_skew="+0.42 (Pareto Heavy-Tail)",
+            conn_per_burst="1.15 (HTTP/2 Multiplex)",
         ),
         FlowEntry(
             flow_id="f5",
             pid=2023,
             process_name="svchost.exe",
             is_signed=True,
-            src_ip="10.0.0.15",
+            src_ip="10.0.1.15",
             src_port=50228,
             dst_ip="20.189.139.81",
             dst_port=443,
-            sni="*.azure.com",
+            sni="*.events.data.microsoft.com",
             interval_str="Asynch",
             sparkline="──    ──",
-            jitter_str="N/A",
-            jitter_pct="N/A",
+            jitter_str="±42.0s",
+            jitter_pct="71.5%",
             payload_str="3.6 KB",
             threat_score=0.008,
             threat_label="SAFE",
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Windows\System32\svchost.exe",
-            command_line=r"C:\Windows\System32\svchost.exe -k DcomLaunch -p",
-            parent_process="services.exe (PID 644)",
-            sig_info="Microsoft Windows (Catalog Signed)",
+            command_line=r"C:\Windows\System32\svchost.exe -k netsvcs -p -s DiagTrack",
+            parent_process="services.exe (PID 684) -> svchost.exe (PID 2023)",
+            sig_info="Microsoft Windows (Catalog Signed PPL)",
             sha256="5a1098b10ef3341b8a99002477cbb14002fa1098112233445566778899aabbcc",
+            process_guid="{8f3a91c2-000f-672a-0500-0000000007e7}",
             ja4_fingerprint="t13d1516h2_8daaf6152771_0266e33433e9",
-            heuristic_signals="OS Kernel Baseline",
-            detection_reasons="Operating System Kernel Service Baseline",
-            bursts="Asynchronous",
-            user_context=r"NT AUTHORITY\SYSTEM",
+            heuristic_signals="OS Kernel Baseline │ Protected Process Light",
+            detection_reasons="Operating System Core Telemetry Service",
+            bursts="Asynchronous (320 pkts)",
+            user_context=r"NT AUTHORITY\SYSTEM (System Integrity)",
             is_severed=False,
             mitre_technique="None (Core OS Service)",
             state="ESTABLISHED",
             packets=320,
             bytes_transferred=182400,
+            first_seen="2026-11-02 08:00:15",
+            last_seen="2026-11-02 14:26:12",
+            duration="6h 25m",
+            iat_mad_ratio="0.715 (Event-Driven)",
+            iat_iqr_ratio="0.940 (High Entropy IAT)",
+            bowley_skew="+0.51 (Bursty Telemetry)",
+            conn_per_burst="1.00 (Keep-Alive)",
         ),
         FlowEntry(
             flow_id="f6",
             pid=3614,
             process_name="docker.exe",
             is_signed=True,
-            src_ip="10.0.0.15",
+            src_ip="10.0.1.15",
             src_port=50352,
             dst_ip="104.244.136.16",
             dst_port=443,
-            sni="registry.docker.io",
+            sni="registry-1.docker.io",
             interval_str="10.0s",
             sparkline="▄  ▄  ▄",
             jitter_str="±0.5s",
             jitter_pct="5.0%",
             payload_str="780 B",
-            threat_score=0.008,
+            threat_score=0.012,
             threat_label="SAFE",
             is_threat=False,
             c2_framework=None,
-            binary_path=r"C:\Program Files\Docker\docker.exe",
-            command_line=r"docker.exe pull alpine:latest",
-            parent_process="powershell.exe (PID 5120)",
-            sig_info="Docker Inc.",
+            binary_path=r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+            command_line=r"docker.exe events --filter type=container --format json",
+            parent_process="com.docker.backend.exe (PID 2910) -> docker.exe (PID 3614)",
+            sig_info="Docker Inc. (EV Code Signing)",
             sha256="89acbf0198aa47b60214ee00b891bcfa0014a5566778899aabbccddeeff00112",
+            process_guid="{8f3a91c2-3b82-672a-0600-000000000e1e}",
             ja4_fingerprint="t13d1516h2_8daaf6152771_c2140bb063ea",
-            heuristic_signals="Container Runtime Sync",
-            detection_reasons="Verified Container Runtime Registry Sync",
-            bursts="2 bursts / 5m",
-            user_context=r"NT AUTHORITY\SYSTEM",
+            heuristic_signals="Signed Vendor Daemon │ Known Registry SNI",
+            detection_reasons="Verified Container Runtime Heartbeat (Allowlisted)",
+            bursts="26 bursts / 44m (84 pkts)",
+            user_context=r"NT AUTHORITY\SYSTEM (Service)",
             is_severed=False,
-            mitre_technique="None (Developer Tool)",
+            mitre_technique="None (Signed Vendor Daemon)",
             state="ESTABLISHED",
             packets=84,
             bytes_transferred=68880,
+            first_seen="2026-11-02 13:42:26",
+            last_seen="2026-11-02 14:26:45",
+            duration="44m 19s",
+            iat_mad_ratio="0.050 (Signed Daemon)",
+            iat_iqr_ratio="0.082 (Vendor Keepalive)",
+            bowley_skew="+0.01 (Timer Driven)",
+            conn_per_burst="1.00 (TLS Session Reuse)",
         ),
         FlowEntry(
             flow_id="f7",
             pid=9216,
             process_name="chrome.exe",
             is_signed=True,
-            src_ip="10.0.0.15",
+            src_ip="10.0.1.15",
             src_port=50480,
             dst_ip="142.250.200.35",
             dst_port=443,
             sni="*.1e100.net",
             interval_str="Asynch",
             sparkline="──    ──",
-            jitter_str="N/A",
-            jitter_pct="N/A",
+            jitter_str="±29.1s",
+            jitter_pct="78.4%",
             payload_str="3.8 KB",
             threat_score=0.002,
             threat_label="SAFE",
             is_threat=False,
             c2_framework=None,
             binary_path=r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            command_line=r"chrome.exe --profile-directory=Default https://google.com",
-            parent_process="explorer.exe (PID 2110)",
-            sig_info="Google LLC",
+            command_line=r"chrome.exe --type=utility --utility-sub-type=network.mojom.NetworkService",
+            parent_process="explorer.exe (PID 2110) -> chrome.exe (PID 9216)",
+            sig_info="Google LLC (Authenticode Verified)",
             sha256="3b49f281e05a88c42b9100fae91845bb0299887766554433221100ffeeddccbb",
+            process_guid="{8f3a91c2-21a0-672a-0700-000000002400}",
             ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
-            heuristic_signals="Interactive Browser",
-            detection_reasons="Commercial Web Browser Baseline",
-            bursts="Asynchronous",
-            user_context=r"CORP\jdoe (Standard)",
+            heuristic_signals="Interactive Browser │ Chrome TLS GREASE",
+            detection_reasons="Commercial Web Browser Baseline (High IAT Variance)",
+            bursts="Asynchronous (4,210 pkts)",
+            user_context=r"CORP\jdoe (AppContainer Low)",
             is_severed=False,
             mitre_technique="None (Web Navigation)",
             state="ESTABLISHED",
             packets=4210,
             bytes_transferred=1602480,
+            first_seen="2026-11-02 12:12:08",
+            last_seen="2026-11-02 14:26:39",
+            duration="2h 14m",
+            iat_mad_ratio="0.784 (Human Browsing)",
+            iat_iqr_ratio="1.120 (Stochastic Clicks)",
+            bowley_skew="+0.64 (Heavy Right Skew)",
+            conn_per_burst="2.40 (CDN Pool)",
         ),
         FlowEntry(
             flow_id="f8",
             pid=4118,
             process_name="msedge.exe",
             is_signed=True,
-            src_ip="10.0.0.15",
+            src_ip="10.0.1.15",
             src_port=50596,
             dst_ip="204.79.197.200",
             dst_port=443,
             sni="*.bing.com",
             interval_str="Asynch",
             sparkline="──    ──",
-            jitter_str="N/A",
-            jitter_pct="N/A",
+            jitter_str="±34.6s",
+            jitter_pct="81.2%",
             payload_str="1.8 KB",
             threat_score=0.001,
             threat_label="SAFE",
             is_threat=False,
             c2_framework=None,
-            binary_path=r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-            command_line=r"msedge.exe --profile-directory=Default https://bing.com",
-            parent_process="explorer.exe (PID 2110)",
-            sig_info="Microsoft Corporation",
+            binary_path=r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            command_line=r"msedge.exe --profile-directory=Default https://portal.azure.com",
+            parent_process="explorer.exe (PID 2110) -> msedge.exe (PID 4118)",
+            sig_info="Microsoft Corporation (Authenticode Verified)",
             sha256="88f1c30291ba44c80112aa8944cc9921b77766554433221100ffeeddccbbaa99",
+            process_guid="{8f3a91c2-27b8-672a-0800-000000001016}",
             ja4_fingerprint="t13d311200_0026e4975549_d8c0dc890209",
-            heuristic_signals="Edge Browser Baseline",
-            detection_reasons="Operating System Default Browser",
-            bursts="Asynchronous",
-            user_context=r"CORP\jdoe (Standard)",
+            heuristic_signals="Edge Browser Baseline │ Valid SNI",
+            detection_reasons="Operating System Default Browser Baseline",
+            bursts="Asynchronous (2,104 pkts)",
+            user_context=r"CORP\jdoe (AppContainer Low)",
             is_severed=False,
             mitre_technique="None (Web Navigation)",
             state="ESTABLISHED",
             packets=2104,
             bytes_transferred=819200,
+            first_seen="2026-11-02 12:38:19",
+            last_seen="2026-11-02 14:26:30",
+            duration="1h 48m",
+            iat_mad_ratio="0.812 (Human Browsing)",
+            iat_iqr_ratio="1.185 (Stochastic Session)",
+            bowley_skew="+0.58 (Heavy Right Skew)",
+            conn_per_burst="1.80 (HTTP/3 Fallback)",
         ),
     ]
 
@@ -539,11 +715,29 @@ def restore_terminal() -> None:
         pass
 
 
-def run_cockpit(demo_mode: bool = True) -> int:
-    """Executes the interactive terminal event loop with live psutil telemetry."""
+def run_cockpit(demo_mode: bool = False) -> int:
+    """Executes the interactive terminal event loop with live psutil telemetry or isolated simulated C2 flows."""
+    import socket as _sock
     setup_terminal()
     console = Console(color_system="truecolor")
-    state = CockpitState(flows=get_demo_flows())
+    if demo_mode:
+        flows = get_demo_flows()
+        host_label = "WIN-PROD-SRV01 (X64)"
+        total_socks = 124
+    else:
+        flows = collect_live_host_flows()
+        host_label = f"{_sock.gethostname().upper()} (LIVE)"
+        total_socks = len(flows)
+
+    active_count = sum(1 for f in flows if f.is_threat and not f.is_severed)
+    state = CockpitState(
+        flows=flows,
+        demo_mode=demo_mode,
+        host_name=host_label,
+        total_sockets=total_socks,
+        active_beacons=active_count,
+        selected_index=0,
+    )
     kb = NonBlockingKeyboard()
 
     # Track host process metrics via psutil
@@ -791,10 +985,5 @@ def run_cockpit(demo_mode: bool = True) -> int:
 
 
 if __name__ == "__main__":
-    if "--cli" in sys.argv:
-        sys.exit(run_cockpit(demo_mode=True))
-    elif sys.platform == "win32":
-        from uncloak.ui.desktop import launch_desktop
-        sys.exit(launch_desktop())
-    else:
-        sys.exit(run_cockpit(demo_mode=True))
+    use_demo = "--demo" in sys.argv
+    sys.exit(run_cockpit(demo_mode=use_demo))
