@@ -484,8 +484,8 @@ def render_table(state: CockpitState, width: int = 120, table_height: Optional[i
     )
 
 
-def format_forensic_path(path: str) -> str:
-    """Semantic forensic path compression preserving critical security zone context."""
+def format_binary_path(path: str) -> str:
+    """Semantic binary path compression preserving critical security zone context."""
     if not path:
         return "Unknown"
     parts = path.replace("/", "\\").split("\\")
@@ -513,7 +513,7 @@ def format_forensic_path(path: str) -> str:
 
 
 def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -> RenderableType:
-    """Renders the 3-block horizontal forensic attribution drawer strictly matching reference."""
+    """Renders the 3-block horizontal host and cadence attribution drawer."""
     if not selected_flow:
         return Panel(Text("No session selected for inspection", style="dim center"), border_style="#262b38")
 
@@ -543,7 +543,7 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
     proc_style = "bold #93c5fd" if selected_flow.is_severed else ("bold #fca5a5" if selected_flow.is_threat else "bold #e5e7eb")
     c1.append(f"{selected_flow.process_name[:28]}\n", style=proc_style)
     c1.append("Path   : ", style="#6b7280")
-    p_disp = format_forensic_path(selected_flow.binary_path)
+    p_disp = format_binary_path(selected_flow.binary_path)
     c1.append(f"{p_disp}\n", style="#e5e7eb")
     c1.append("Sig    : ", style="#6b7280")
     if selected_flow.process_name in ("powershell.exe", "rundll32.exe", "cmd.exe", "wmic.exe", "wmiprvse.exe") and selected_flow.is_threat:
@@ -681,9 +681,9 @@ def render_bottom_drawer(selected_flow: Optional[FlowEntry], width: int = 120) -
 
 
 def render_dossier_modal(flow: Optional[FlowEntry], width: int = 120) -> RenderableType:
-    """Renders the comprehensive Process Forensic Dossier overlay modal."""
+    """Renders the comprehensive Process Attribution Dossier overlay modal."""
     if not flow:
-        return Panel(Text("No session selected for forensic dossier", style="dim center"), border_style="#262b38")
+        return Panel(Text("No session selected for attribution dossier", style="dim center"), border_style="#262b38")
 
     body = Text()
     body.append("Process Name   : ", style="#6b7280")
@@ -748,7 +748,7 @@ def render_dossier_modal(flow: Optional[FlowEntry], width: int = 120) -> Rendera
 
     return Panel(
         body,
-        title=f"[bold #e5e7eb] Process Forensic Dossier : {flow.process_name} (PID {flow.pid}) [/]",
+        title=f"[bold #e5e7eb] Process Attribution Dossier : {flow.process_name} (PID {flow.pid}) [/]",
         border_style="#323846",
         style="on #0c0e13",
         padding=(0, 2),
@@ -821,7 +821,7 @@ def build_cockpit_layout(state: CockpitState, width: int = 120, height: Optional
     header_size = 3
     footer_size = 2
 
-    # Tier 3: Process Forensic Dossier Mode
+    # Tier 3: Process Attribution Dossier Mode
     if state.show_dossier:
         selected_flow = None
         visible_flows = get_visible_flows(state)

@@ -31,7 +31,7 @@ Modern command-and-control (C2) implants (Cobalt Strike, Sliver, Havoc, Brute Ra
 * **Robust Jitter Analysis:** Uses non-parametric statistical estimators (Median, Median Absolute Deviation, Interquartile Range, Bowley Skew) to distinguish human browsing bursts from algorithmic C2 sleep loops.
 * **Kernel Socket-to-PID Attribution:** Binds network flows to local Windows processes via native Win32 `GetExtendedTcpTable`, resolving the PID, binary path, and parent hierarchy.
 * **Surgical Socket Mitigation & Per-App Containment:** Designed to sever malicious connections on demand using `SetTcpEntry(MIB_TCP_STATE_DELETE_TCB)` and per-application Windows Firewall rules without terminating critical host processes.
-* **Terminal & Desktop Cockpits:** A responsive Rich Console User Interface (CUI) with a collapsible forensic telemetry drawer, plus a WebView2 desktop cockpit for fleet triage.
+* **Terminal & Desktop Cockpits:** A responsive Rich Console User Interface (CUI) with a collapsible live attribution drawer, plus a Central SOC Web Cockpit for fleet triage.
 * **Audit-First Safety:** Operates in non-disruptive audit/detect mode by default before any active enforcement is enabled.
 * **Headless SIEM / SOC Streaming:** Streams structured NDJSON alerts (`-j / --json`) for Wazuh, Splunk, or Elastic.
 
@@ -111,7 +111,7 @@ uncloak cli
 python -m uncloak cli
 ```
 * **Controls:**
-  * `[TAB]` : Toggle forensic inspection drawer
+  * `[ENTER]` : Toggle live attribution drawer
   * `[SPACE]` : Pause / resume live stream
   * `[K]` : Kill selected anomalous socket (`SetTcpEntry DELETE_TCB` - planned)
   * `[Q]` : Quit cleanly
@@ -159,7 +159,7 @@ uncloak manager
 
 ---
 
-### Offline DFIR PCAP Triage & SOC Streaming (Planned v1.0 CLI)
+### PCAP Telemetry Replay & SIEM Streaming
 
 #### 1. Replay & Analyze a Captured PCAP
 ```bash

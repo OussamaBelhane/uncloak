@@ -826,7 +826,7 @@ def run_cockpit(demo_mode: bool = False) -> int:
                             state.viewport_start = 0
                             needs_render = True
 
-                    # Mode 2: Process Forensic Dossier Modal
+                    # Mode 2: Process Attribution Dossier Modal
                     elif state.show_dossier:
                         if key in ("ESC", "\x1b") or key.lower() in ("i", "q"):
                             state.show_dossier = False
@@ -916,7 +916,7 @@ def run_cockpit(demo_mode: bool = False) -> int:
                             elif key in ("ENTER", "\r", "\n") or key_lower == "d":  # Toggle drawer
                                 state.drawer_expanded = not state.drawer_expanded
                                 needs_render = True
-                            elif key_lower == "i":  # Open Process Forensic Dossier
+                            elif key_lower == "i":  # Open Process Attribution Dossier
                                 state.show_dossier = True
                                 needs_render = True
                             elif key == "/":  # Interactive Search

@@ -1,5 +1,5 @@
 """
-Offline DFIR PCAP/PCAPNG Replay Engine for Uncloak.
+PCAP/PCAPNG Telemetry Replay Harness for Uncloak.
 Replays captured network packet streams, resolves DNS/SNI context, aggregates application bursts,
 constructs Feature Schema v1 vectors, and renders tactical CLI or OCSF/NDJSON triage reports.
 """
@@ -229,7 +229,7 @@ def render_pcap_report(
     console: Optional[Console] = None,
 ) -> int:
     """
-    Replays a PCAP file and renders either a high-impact Rich DFIR Table report
+    Replays a PCAP file and renders either a high-impact Rich C2 Triage Table report
     or OCSF v1.1.0 NDJSON objects to stdout for CLI pipelines.
     """
     t0 = time.perf_counter()

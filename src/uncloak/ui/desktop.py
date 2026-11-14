@@ -1312,7 +1312,7 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     align-items: stretch;
   }
 
-  .forensic-card {
+  .inspector-card {
     background: transparent;
     border: none;
     border-right: 1px solid var(--border);
@@ -1323,7 +1323,7 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     justify-content: space-between;
     gap: 6px;
   }
-  .forensic-card:last-child { border-right: none; }
+  .inspector-card:last-child { border-right: none; }
 
   .card-title {
     font-family: var(--font-mono);
@@ -1853,7 +1853,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
 
         <div class="drawer-cards">
           <!-- Column 1: Process & Kernel Attribution -->
-          <div class="forensic-card">
+          <div class="inspector-card">
             <div class="card-title"><span class="card-indicator"></span>01 / PROCESS & KERNEL ATTRIBUTION</div>
             <div class="card-kv-grid">
               <div class="card-row"><span class="card-label">Process & PID</span><span class="card-value highlight-red" id="c1-proc">update.exe (PID 5824)</span></div>
@@ -1875,7 +1875,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
           </div>
 
           <!-- Column 2: FlowFeaturesV1 Cadence Telemetry -->
-          <div class="forensic-card">
+          <div class="inspector-card">
             <div class="card-title"><span class="card-indicator"></span>02 / FLOWFEATURESV1 CADENCE TELEMETRY</div>
             <div class="card-kv-grid">
               <div class="card-row"><span class="card-label">Beacon State</span><span class="card-value highlight-red" id="c2-state">ACTIVE C2 BEACON (Live Socket)</span></div>
@@ -1893,7 +1893,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
           </div>
 
           <!-- Column 3: MITRE & Containment Controls -->
-          <div class="forensic-card">
+          <div class="inspector-card">
             <div class="card-title"><span class="card-indicator"></span>03 / MITRE ATT&CK & CONTAINMENT</div>
             <div class="card-kv-grid">
               <div class="card-row"><span class="card-label">MITRE ATT&CK</span><span class="card-value highlight-red" id="c3-mitre">T1071.001 (Web Protocols) + T1573</span></div>
@@ -1997,11 +1997,11 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     </div>
   </div>
 
-  <!-- PROCESS FORENSIC DOSSIER MODAL -->
+  <!-- PROCESS ATTRIBUTION DOSSIER MODAL -->
   <div class="modal-overlay" id="dossier-modal">
     <div class="modal-window">
       <div class="modal-header">
-        <h3 id="modal-dossier-title">Process Forensic Dossier</h3>
+        <h3 id="modal-dossier-title">Process Attribution Dossier</h3>
         <button class="btn-close" onclick="closeDossierModal()">&times;</button>
       </div>
       <div class="dossier-body" id="modal-dossier-body" style="font-size: 11.5px; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
@@ -2818,7 +2818,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const isAlpha = (camp.campaign_id === 'camp-alpha');
 
     let topologySvg = '';
-    let forensicsHtml = '';
+    let telemetryGridHtml = '';
     let mitreHtml = '';
     let evidenceTableHtml = '';
 
@@ -2853,7 +2853,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         </div>
       `;
 
-      forensicsHtml = `
+      telemetryGridHtml = `
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
           <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
             <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Shared TLS JA4</div>
@@ -2977,7 +2977,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         </div>
       `;
 
-      forensicsHtml = `
+      telemetryGridHtml = `
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
           <div style="background: #0c0e13; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border);">
             <div style="font-size: 9.5px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">Shared TLS JA4</div>
@@ -3076,7 +3076,7 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
         </div>
 
         ${topologySvg}
-        ${forensicsHtml}
+        ${telemetryGridHtml}
         ${mitreHtml}
         ${evidenceTableHtml}
       </div>
@@ -3803,11 +3803,11 @@ window.INITIAL_STATE = __INITIAL_STATE_PLACEHOLDER__;
     const flow = stateData.flows.find(f => f.pid === stateData.selected_pid) || stateData.flows[0];
     if (!flow) return;
 
-    document.getElementById('modal-dossier-title').innerText = `Process Forensic Dossier: ${flow.process_name} (PID ${flow.pid})`;
+    document.getElementById('modal-dossier-title').innerText = `Process Attribution Dossier: ${flow.process_name} (PID ${flow.pid})`;
     const body = document.getElementById('modal-dossier-body');
     body.innerHTML = `
       <div style="background: #0c0e13; padding: 12px; border-radius: 5px; border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;">
-        <div style="color: var(--text-dim); font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Hybrid Attribution Triplet &amp; Binary Forensics</div>
+        <div style="color: var(--text-dim); font-family: var(--font-sans); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Hybrid Attribution Triplet &amp; Binary Verification</div>
         <div><span style="color: var(--text-muted);">ProcessGuid:</span> <span style="color: var(--text-main);">${flow.process_guid || '{61b338eb-5824-0001-a4f9-82d17c63e019}'}</span></div>
         <div><span style="color: var(--text-muted);">Binary Path:</span> <span style="color: var(--text-main);">${flow.binary_path || 'C:\\\\Windows\\\\System32\\\\' + flow.process_name}</span></div>
         <div><span style="color: var(--text-muted);">Command Line:</span> <code style="color: #fcd34d;">${flow.command_line || 'N/A'}</code></div>

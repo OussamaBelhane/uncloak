@@ -77,9 +77,9 @@ This document catalogs verified peer-reviewed publications and technical referen
    * *Uncloak Role:* Benchmarks encrypted Cobalt Strike HTTPS traffic classification using flow-level features.
    * *Ref:* [DOI: 10.1016/j.comnet.2023.110120](https://doi.org/10.1016/j.comnet.2023.110120)
 
-10. **Lo, W. W., Kulatilleke, G. K., Sarhan, M., Layeghy, S., & Portmann, M. (2022) - *XG-BoT: An Explainable Deep Graph Neural Network for Botnet Detection and Forensics***
+10. **Lo, W. W., Kulatilleke, G. K., Sarhan, M., Layeghy, S., & Portmann, M. (2022) - *XG-BoT: An Explainable Deep Graph Neural Network for Botnet Detection***
     * *Publication:* arXiv preprint.
-    * *Uncloak Role:* Highlights the importance of explainable forensics in automated network detection pipelines.
+    * *Uncloak Role:* Highlights the importance of explainable attribution in automated network detection pipelines.
     * *Ref:* [arXiv:2207.09088](https://arxiv.org/abs/2207.09088)
 
 ---

@@ -1,5 +1,5 @@
 """
-Generates realistic multi-flow DFIR sample captures in samples/ for instant zero-risk CLI testing:
+Generates realistic multi-flow C2 and baseline sample captures in samples/ for CLI replay testing:
   python -m uncloak -r samples/sliver_c2_capture.pcap
 """
 
