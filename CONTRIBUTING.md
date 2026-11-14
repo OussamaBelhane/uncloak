@@ -1,53 +1,37 @@
 # Contributing to Uncloak
 
-Thank you for your interest in contributing to **Uncloak**.
+Thank you for contributing to **Uncloak**.
+Uncloak is engineered as a production-grade Windows C2 beacon detection and socket attribution platform. All contributors must follow strict architectural boundaries, security hygiene, and test verification before opening a Pull Request.
 
-Uncloak is engineered as a high-performance, production-grade cybersecurity tool. We maintain uncompromising code quality, zero amateur hacks, and strict architectural discipline.
+### Core Engineering Rules
 
----
-
-### Core Engineering Guidelines
-
-1. **The `src/` Layout:** All production code lives exclusively under `src/uncloak/`.
-2. **Strict Typing:** All new functions and methods must have complete Python type annotations validated by `mypy --strict`.
-3. **Decoupled Architecture:** Subsystems (Capture, Attribution, Analysis, Storage, UI) must communicate only through typed dataclass models in `core/models.py`.
-4. **Performance Constraints:**
-   - Memory footprint: `< 10 MB` RAM under normal operation.
-   - CPU utilization: `< 2%` on average host workloads.
-   - Zero blocking synchronous operations inside live packet capture loops.
-5. **Testing Requirements:**
-   - Every bug fix or feature must include corresponding unit tests in `tests/unit/`.
-   - Windows-specific API calls (`iphlpapi.dll`) must be accompanied by mock fallbacks in `platform_compat.py` to allow the test suite to pass on Linux CI runners.
-
----
+1. **Frozen Data Contract (`FlowFeaturesV1`):** Subsystems (Capture, Attribution, Detection, Storage, Manager, UI) communicate through typed dataclass contracts in `src/uncloak/core/models.py` and `data/feature_schema_v1.json`. Do not modify `core/models.py` unless explicitly assigned.
+2. **Scope Isolation:** Only modify files listed in your assigned GitHub Issue. Never touch unrelated UI (`src/uncloak/ui/`), CLI (`src/uncloak/cli/`), agent (`src/uncloak/agent/`), or mitigation (`src/uncloak/mitigation/`) modules outside your task scope.
+3. **Zero Unsafe Serialization:** Never commit or load `.pkl`, `pickle`, or `joblib` model files. Trained model weights must be exported as safe JSON (`coef`, `intercept`, metadata) or ONNX.
+4. **Zero `shell=True` & Hardcoded Secrets:** Never invoke `subprocess.run(..., shell=True)`, and never commit API tokens, passwords, private keys, or personal machine paths.
+5. **Test Verification:** Every Pull Request must include unit tests in `tests/` and keep the full test suite green (`python tests/run_tests.py`).
 
 ### Development Setup
 
-```bash
+```powershell
 # 1. Clone repository
-git clone https://github.com/uncloak-project/uncloak.git
+git clone https://github.com/OussamaBelhane/uncloak.git
 cd uncloak
 
 # 2. Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 
-# 3. Install dependencies in editable mode with development tools
+# 3. Install package in editable mode with dev tools
 pip install -e ".[dev]"
 
-# 4. Run tests
-pytest
-
-# 5. Run linting and type-checking
-ruff check .
-mypy src/
+# 4. Run full test suite
+python tests/run_tests.py
 ```
-
----
 
 ### Submitting a Pull Request
 
-1. Create a focused feature branch (`git checkout -b feat/kernel-syn-cache`).
-2. Ensure all tests pass (`pytest`) and code passes lint checks (`ruff check .`).
-3. Write clear, imperative commit messages (`feat: add IQR jitter calculation to analysis engine`).
-4. Submit your PR with a concise description of the problem solved and test evidence.
+1. Create a focused feature branch from `main` (`git checkout -b feat/your-task-name`).
+2. Implement only the scope defined in your assigned GitHub Issue.
+3. Run `python tests/run_tests.py` and confirm `0 FAILED`.
+4. Open a Pull Request targeting `main` and complete the PR checklist.
