@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+from uncloak.core.policy import PolicyManager
 from uncloak.manager.fleet import FleetManager
 from uncloak.ui.cockpit import FlowEntry, export_telemetry_json
 from uncloak.ui.layout import CockpitState
@@ -28,6 +29,7 @@ class CockpitDataManager:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.fleet = FleetManager()
+        self.policy_manager = PolicyManager()
         self.start_time = time.time()
         self.active_tab = "fleet"  # fleet, campaign, drilldown
 
@@ -115,12 +117,24 @@ class CockpitDataManager:
             for h in self.fleet.hosts.values():
                 subnet = h.subnet or "Tier-2 Workstations"
                 if "Tier-0" in subnet:
+                    default_tier = "Tier-0"
                     tier_label = "Tier-0 (Crown Jewels)"
                 elif "Tier-1" in subnet or "Jump" in subnet or "DMZ" in subnet:
+                    default_tier = "Tier-1"
                     tier_label = "Tier-1 (App & DMZ)"
                 elif "Local" in subnet:
+                    default_tier = "Tier-2"
                     tier_label = "Tier-2 (Host Sensor)"
                 else:
+                    default_tier = "Tier-2"
+                    tier_label = "Tier-2 (Workstation)"
+
+                eff = self.policy_manager.get_effective_policy(h.host_id, default_tier=default_tier)
+                if eff["effective_tier"] == "Tier-0":
+                    tier_label = "Tier-0 (Crown Jewels)"
+                elif eff["effective_tier"] == "Tier-1":
+                    tier_label = "Tier-1 (App & DMZ)"
+                elif eff["effective_tier"] == "Tier-2" and "Local" not in subnet:
                     tier_label = "Tier-2 (Workstation)"
 
                 os_ver = h.os_version or "Windows 11"
@@ -133,6 +147,11 @@ class CockpitDataManager:
                     "ip_address": h.ip_address,
                     "subnet": h.subnet,
                     "ad_tier": tier_label,
+                    "effective_tier": eff["effective_tier"],
+                    "effective_mode": eff["effective_mode"],
+                    "mode_label": eff["mode_label"],
+                    "has_override": eff["has_override"],
+                    "maintenance_mode": eff["maintenance_mode"],
                     "os_version": h.os_version,
                     "os_build": build_str,
                     "agent_version": h.agent_version,
@@ -162,6 +181,9 @@ class CockpitDataManager:
                     "status": c.status,
                 })
 
+            sel_default_tier = "Tier-0" if "Tier-0" in (selected_host.subnet or "") else ("Tier-1" if any(k in (selected_host.subnet or "") for k in ("Tier-1", "Jump", "DMZ")) else "Tier-2")
+            sel_eff = self.policy_manager.get_effective_policy(selected_host.host_id, default_tier=sel_default_tier)
+
             return {
                 "app_name": "UNCLOAK",
                 "version": "v0.1.0",
@@ -169,12 +191,18 @@ class CockpitDataManager:
                 "fleet_summary": fleet_summary,
                 "hosts": hosts_list,
                 "campaigns": campaigns_list,
+                "policies": self.policy_manager.state,
                 "selected_host_id": selected_host.host_id,
                 "selected_host": {
                     "host_id": selected_host.host_id,
                     "hostname": selected_host.hostname,
                     "ip_address": selected_host.ip_address,
                     "subnet": selected_host.subnet,
+                    "ad_tier": sel_eff["effective_tier"],
+                    "effective_mode": sel_eff["effective_mode"],
+                    "mode_label": sel_eff["mode_label"],
+                    "has_override": sel_eff["has_override"],
+                    "maintenance_mode": sel_eff["maintenance_mode"],
                     "os_version": selected_host.os_version,
                     "threat_level": selected_host.threat_level,
                     "threat_score": selected_host.threat_score,
@@ -237,6 +265,33 @@ class CockpitDataManager:
             state = CockpitState(flows=flows)
             return export_telemetry_json(state, target_flow=target_flow)
 
+    def update_policies(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self.lock:
+            if any(k in payload for k in ("tier0", "tier1", "tier2")):
+                self.policy_manager.set_tier_policies(
+                    tier0=payload.get("tier0"),
+                    tier1=payload.get("tier1"),
+                    tier2=payload.get("tier2"),
+                )
+            if any(k in payload for k in ("alert_confidence", "block_confidence", "max_mad_ratio", "min_bursts")):
+                self.policy_manager.set_thresholds(
+                    alert_confidence=payload.get("alert_confidence"),
+                    block_confidence=payload.get("block_confidence"),
+                    max_mad_ratio=payload.get("max_mad_ratio"),
+                    min_bursts=payload.get("min_bursts"),
+                )
+            return dict(self.policy_manager.state)
+
+    def override_host_policy(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self.lock:
+            host_id = payload.get("host_id") or self.fleet.selected_host_id
+            return self.policy_manager.set_host_override(
+                host_id=host_id,
+                tier=payload.get("tier"),
+                mode=payload.get("mode"),
+                maintenance_mode=payload.get("maintenance_mode"),
+            )
+
 
 DATA_MANAGER = CockpitDataManager()
 
@@ -293,6 +348,8 @@ class UncloakHTTPHandler(BaseHTTPRequestHandler):
                     pid = 0
                 summary = DATA_MANAGER.fleet.get_pid_history_summary(host_id, pid)
                 self.send_json(summary)
+            elif parsed.path == "/api/policies":
+                self.send_json(DATA_MANAGER.policy_manager.state)
             elif parsed.path == "/favicon.ico":
                 self.send_response(204)
                 self.end_headers()
@@ -355,6 +412,20 @@ class UncloakHTTPHandler(BaseHTTPRequestHandler):
                 host_id = req_data.get("host_id", "")
                 success = DATA_MANAGER.isolate_host(host_id)
                 self.send_json({"success": success, "host_id": host_id})
+
+            elif parsed.path == "/api/policies":
+                try:
+                    updated = DATA_MANAGER.update_policies(req_data)
+                    self.send_json({"success": True, "policies": updated})
+                except ValueError as err:
+                    self.send_json({"success": False, "error": str(err)}, status=400)
+
+            elif parsed.path == "/api/host_override":
+                try:
+                    override = DATA_MANAGER.override_host_policy(req_data)
+                    self.send_json({"success": True, "override": override})
+                except ValueError as err:
+                    self.send_json({"success": False, "error": str(err)}, status=400)
 
             elif parsed.path == "/api/export":
                 pid = req_data.get("pid")
@@ -1586,6 +1657,103 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
     font-size: 12.5px;
     font-weight: 500;
   }
+  .preset-segmented {
+    display: inline-flex;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .preset-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.14s ease;
+  }
+  .preset-btn:hover {
+    color: var(--text-main);
+  }
+  .preset-btn.active {
+    background: var(--bg-surface);
+    color: var(--accent);
+    box-shadow: var(--shadow-sm);
+  }
+  .threshold-grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .precision-card {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 11px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .precision-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .precision-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .precision-input-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0 10px;
+    height: 34px;
+    transition: border-color 0.14s ease;
+  }
+  .precision-input-wrap:focus-within {
+    border-color: var(--accent);
+  }
+  .precision-input {
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    font-weight: 700;
+    width: 100%;
+    outline: none;
+  }
+  .precision-unit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .host-override-strip {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
+  }
   .code-viewer {
     background: var(--bg-code);
     color: var(--code-text);
@@ -1947,14 +2115,6 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
       </div>
 
       <div class="top-right">
-        <div class="time-selector-group" title="Filter log retention window">
-          <button class="time-pill-btn" id="tr-live" onclick="setGlobalTimeRange('live')">Live</button>
-          <button class="time-pill-btn" id="tr-24h" onclick="setGlobalTimeRange('24h')">24h</button>
-          <button class="time-pill-btn" id="tr-7d" onclick="setGlobalTimeRange('7d')">7d</button>
-          <button class="time-pill-btn" id="tr-30d" onclick="setGlobalTimeRange('30d')">30d</button>
-          <button class="time-pill-btn active" id="tr-all" onclick="setGlobalTimeRange('all')">All</button>
-        </div>
-
         <button class="threat-alert-chip" id="top-threat-chip" onclick="filterToActiveThreats()">
           <span class="dot-status crit"></span>
           <span id="top-threat-label">4 Active Threats</span>
@@ -2156,6 +2316,31 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
           </div>
         </div>
 
+        <div class="host-override-strip">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);">Host Governance Override:</span>
+            <label for="hd-override-tier" style="font-size: 12px; color: var(--text-secondary);">AD Tier</label>
+            <select id="hd-override-tier" class="tier-select" style="height: 30px;">
+              <option value="Tier-0">Tier-0 (DC / PKI)</option>
+              <option value="Tier-1">Tier-1 (App / SQL Server)</option>
+              <option value="Tier-2">Tier-2 (Workstation)</option>
+            </select>
+            <label for="hd-override-mode" style="font-size: 12px; color: var(--text-secondary);">Containment Policy</label>
+            <select id="hd-override-mode" class="tier-select" style="height: 30px;">
+              <option value="inherit">Inherit Tier Policy</option>
+              <option value="auto_wfp">Autonomous SetTcpEntry + WFP</option>
+              <option value="prompt_analyst">Hold Socket + Analyst Prompt</option>
+              <option value="audit_p1">Audit + P1 SIEM Escalation</option>
+              <option value="audit_only">Audit Only (Maintenance Mode)</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="badge neutral" id="hd-override-badge">Inherited</span>
+            <button class="btn btn-primary btn-sm" onclick="applyHostOverride()">Apply Host Override</button>
+          </div>
+        </div>
+        <div class="toast-banner" id="host-override-toast"></div>
+
         <div class="incident-banner" id="hd-incident-banner">
           <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
             <span class="badge crit" id="ib-sev-badge">CRITICAL C2</span>
@@ -2279,7 +2464,16 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
             <h1 class="view-title">Historical Alerts &amp; SIEM Event Log</h1>
             <p class="view-subtitle">Searchable multi-day audit trail across Windows Event Log (EID 9001 / 9002), OCSF v1.1.0 records, and autonomous containments.</p>
           </div>
-          <span class="badge neutral mono" id="alerts-showing-label">Showing 18 of 18 Indexed Events</span>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span class="badge neutral mono" id="alerts-showing-label">Showing 18 of 18 Indexed Events</span>
+            <div class="time-selector-group" title="Filter log retention window">
+              <button class="time-pill-btn" id="tr-live" onclick="setGlobalTimeRange('live')">Live</button>
+              <button class="time-pill-btn" id="tr-24h" onclick="setGlobalTimeRange('24h')">24h</button>
+              <button class="time-pill-btn" id="tr-7d" onclick="setGlobalTimeRange('7d')">7d</button>
+              <button class="time-pill-btn" id="tr-30d" onclick="setGlobalTimeRange('30d')">30d</button>
+              <button class="time-pill-btn active" id="tr-all" onclick="setGlobalTimeRange('all')">All</button>
+            </div>
+          </div>
         </div>
 
         <div class="kpi-grid-4">
@@ -2359,7 +2553,10 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
                 <div class="panel-title">Active Directory Tier Containment Matrix</div>
                 <div class="panel-subtitle">Safeguard mission-critical Domain Controllers while automating workstation containment</div>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="applyPolicyChanges()">Save &amp; Push Policies</button>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-sm" id="copy-pol-cli-btn" onclick="copyPolicyCliCommand()">Copy CLI / PS1</button>
+                <button class="btn btn-primary btn-sm" onclick="applyPolicyChanges()">Save &amp; Push Policies</button>
+              </div>
             </div>
             <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;">
               <div class="toast-banner" id="policy-save-toast"></div>
@@ -2409,19 +2606,61 @@ def get_cockpit_html(initial_payload: dict[str, Any] | None = None) -> str:
                 </select>
               </div>
 
-              <div style="border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 10px;">
-                <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">FlowFeaturesV1 Detection Thresholds</div>
-                <div class="kv-row">
-                  <span class="kv-label">Minimum Threat Confidence for EID 9001</span>
-                  <span class="mono" style="font-weight: 600; color: var(--accent);">0.850 (85.0%)</span>
+              <div style="border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                  <div style="font-size: 13px; font-weight: 600; color: var(--text-main);">FlowFeaturesV1 Sensitivity &amp; Guardrails</div>
+                  <div class="preset-segmented" id="sensitivity-presets">
+                    <button type="button" class="preset-btn" id="preset-conservative" onclick="applySensitivityPreset('conservative')">Conservative</button>
+                    <button type="button" class="preset-btn active" id="preset-balanced" onclick="applySensitivityPreset('balanced')">Balanced</button>
+                    <button type="button" class="preset-btn" id="preset-aggressive" onclick="applySensitivityPreset('aggressive')">Aggressive</button>
+                    <button type="button" class="preset-btn" id="preset-custom" onclick="applySensitivityPreset('custom')">Custom</button>
+                  </div>
                 </div>
-                <div class="kv-row">
-                  <span class="kv-label">Max IAT MAD/Median Ratio for Periodic Jitter</span>
-                  <span class="mono" style="font-weight: 600;">0.180 (Low Entropy)</span>
-                </div>
-                <div class="kv-row">
-                  <span class="kv-label">Minimum Observed Communication Bursts</span>
-                  <span class="mono" style="font-weight: 600;">8 Bursts / Window</span>
+
+                <div class="threshold-grid-2x2">
+                  <div class="precision-card">
+                    <div class="precision-card-head">
+                      <span class="precision-label">Alert Confidence</span>
+                      <span class="badge accent">EID 9001</span>
+                    </div>
+                    <div class="precision-input-wrap">
+                      <input type="number" id="pol-alert-conf" class="precision-input" min="0.10" max="0.99" step="0.01" value="0.85" oninput="markPresetCustom()" />
+                      <span class="precision-unit">score</span>
+                    </div>
+                  </div>
+
+                  <div class="precision-card">
+                    <div class="precision-card-head">
+                      <span class="precision-label">Autonomous Block</span>
+                      <span class="badge crit">EID 9002</span>
+                    </div>
+                    <div class="precision-input-wrap">
+                      <input type="number" id="pol-block-conf" class="precision-input" min="0.50" max="0.99" step="0.01" value="0.90" oninput="markPresetCustom()" />
+                      <span class="precision-unit">score</span>
+                    </div>
+                  </div>
+
+                  <div class="precision-card">
+                    <div class="precision-card-head">
+                      <span class="precision-label">Max MAD / Median</span>
+                      <span class="badge neutral">Low Entropy</span>
+                    </div>
+                    <div class="precision-input-wrap">
+                      <input type="number" id="pol-mad-ratio" class="precision-input" min="0.01" max="0.80" step="0.01" value="0.18" oninput="markPresetCustom()" />
+                      <span class="precision-unit">ratio</span>
+                    </div>
+                  </div>
+
+                  <div class="precision-card">
+                    <div class="precision-card-head">
+                      <span class="precision-label">Min Observation</span>
+                      <span class="badge neutral">Window</span>
+                    </div>
+                    <div class="precision-input-wrap">
+                      <input type="number" id="pol-min-bursts" class="precision-input" min="2" max="50" step="1" value="8" oninput="markPresetCustom()" />
+                      <span class="precision-unit">bursts</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3773,6 +4012,30 @@ crcSalt = <SOURCE>
     document.getElementById('hd-tier').innerText = host.ad_tier || host.subnet;
     document.getElementById('hd-os').innerText = host.os_version;
 
+    const ovTierSel = document.getElementById('hd-override-tier');
+    const ovModeSel = document.getElementById('hd-override-mode');
+    const ovBadge = document.getElementById('hd-override-badge');
+    if (ovTierSel && host.ad_tier) {
+      if (host.ad_tier.includes('Tier-0')) ovTierSel.value = 'Tier-0';
+      else if (host.ad_tier.includes('Tier-1')) ovTierSel.value = 'Tier-1';
+      else ovTierSel.value = 'Tier-2';
+    }
+    if (ovModeSel) {
+      ovModeSel.value = host.has_override && host.effective_mode ? host.effective_mode : 'inherit';
+    }
+    if (ovBadge) {
+      if (host.maintenance_mode) {
+        ovBadge.className = 'badge high';
+        ovBadge.innerText = 'Maintenance Override';
+      } else if (host.has_override) {
+        ovBadge.className = 'badge accent';
+        ovBadge.innerText = 'Custom Override Active';
+      } else {
+        ovBadge.className = 'badge neutral';
+        ovBadge.innerText = 'Inherited (' + (host.mode_label || 'Tier Default') + ')';
+      }
+    }
+
     const agentPill = document.getElementById('hd-agent-state');
     const isoBtn = document.getElementById('btn-isolate-host');
     if (host.is_isolated) {
@@ -3968,7 +4231,86 @@ crcSalt = <SOURCE>
   }
 
   /* ================= VIEW 5: POLICIES & SIEM ================= */
+  const SENSITIVITY_PRESETS = {
+    conservative: { alert: 0.90, block: 0.95, mad: 0.12, bursts: 12 },
+    balanced:     { alert: 0.85, block: 0.90, mad: 0.18, bursts: 8 },
+    aggressive:   { alert: 0.75, block: 0.85, mad: 0.24, bursts: 6 }
+  };
+
+  function syncPresetBadge() {
+    const a = parseFloat(document.getElementById('pol-alert-conf')?.value || '0.85');
+    const b = parseFloat(document.getElementById('pol-block-conf')?.value || '0.90');
+    const m = parseFloat(document.getElementById('pol-mad-ratio')?.value || '0.18');
+    const bu = parseInt(document.getElementById('pol-min-bursts')?.value || '8', 10);
+
+    let matched = 'custom';
+    for (const [key, cfg] of Object.entries(SENSITIVITY_PRESETS)) {
+      if (Math.abs(a - cfg.alert) < 0.005 && Math.abs(b - cfg.block) < 0.005 && Math.abs(m - cfg.mad) < 0.005 && bu === cfg.bursts) {
+        matched = key;
+        break;
+      }
+    }
+    ['conservative', 'balanced', 'aggressive', 'custom'].forEach(k => {
+      const btn = document.getElementById('preset-' + k);
+      if (btn) btn.classList.toggle('active', k === matched);
+    });
+  }
+
+  function applySensitivityPreset(presetKey) {
+    const cfg = SENSITIVITY_PRESETS[presetKey];
+    if (cfg) {
+      document.getElementById('pol-alert-conf').value = cfg.alert.toFixed(2);
+      document.getElementById('pol-block-conf').value = cfg.block.toFixed(2);
+      document.getElementById('pol-mad-ratio').value = cfg.mad.toFixed(2);
+      document.getElementById('pol-min-bursts').value = cfg.bursts;
+    }
+    ['conservative', 'balanced', 'aggressive', 'custom'].forEach(k => {
+      const btn = document.getElementById('preset-' + k);
+      if (btn) btn.classList.toggle('active', k === presetKey);
+    });
+  }
+
+  function markPresetCustom() {
+    syncPresetBadge();
+  }
+
+  function copyPolicyCliCommand() {
+    const a = parseFloat(document.getElementById('pol-alert-conf')?.value || '0.85').toFixed(2);
+    const b = parseFloat(document.getElementById('pol-block-conf')?.value || '0.90').toFixed(2);
+    const m = parseFloat(document.getElementById('pol-mad-ratio')?.value || '0.18').toFixed(2);
+    const bu = parseInt(document.getElementById('pol-min-bursts')?.value || '8', 10);
+    const cmd = `uncloak policy set-thresholds --alert ${a} --block ${b} --mad ${m} --bursts ${bu}\nSet-UncloakThreshold -AlertScore ${a} -ActionScore ${b}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cmd).catch(() => {});
+    }
+    const btn = document.getElementById('copy-pol-cli-btn');
+    if (btn) {
+      btn.innerText = 'Copied!';
+      setTimeout(() => { btn.innerText = 'Copy CLI / PS1'; }, 1500);
+    }
+  }
+
   function renderPoliciesView() {
+    if (stateData && stateData.policies) {
+      const tp = stateData.policies.tier_policies || {};
+      const th = stateData.policies.thresholds || {};
+      const t0El = document.getElementById('pol-tier0-mode');
+      const t1El = document.getElementById('pol-tier1-mode');
+      const t2El = document.getElementById('pol-tier2-mode');
+      if (t0El && tp['Tier-0']) t0El.value = tp['Tier-0'];
+      if (t1El && tp['Tier-1']) t1El.value = tp['Tier-1'];
+      if (t2El && tp['Tier-2']) t2El.value = tp['Tier-2'];
+
+      const alertEl = document.getElementById('pol-alert-conf');
+      const blockEl = document.getElementById('pol-block-conf');
+      const madEl = document.getElementById('pol-mad-ratio');
+      const burstEl = document.getElementById('pol-min-bursts');
+      if (alertEl && th.alert_confidence != null) alertEl.value = Number(th.alert_confidence).toFixed(2);
+      if (blockEl && th.block_confidence != null) blockEl.value = Number(th.block_confidence).toFixed(2);
+      if (madEl && th.max_mad_ratio != null) madEl.value = Number(th.max_mad_ratio).toFixed(2);
+      if (burstEl && th.min_bursts != null) burstEl.value = th.min_bursts;
+      syncPresetBadge();
+    }
     switchSiemSnippet(activeSiemSnippetKey);
   }
 
@@ -3994,16 +4336,64 @@ crcSalt = <SOURCE>
     }
   }
 
-  function applyPolicyChanges() {
+  async function applyPolicyChanges() {
     const t0 = document.getElementById('pol-tier0-mode').value;
     const t1 = document.getElementById('pol-tier1-mode').value;
     const t2 = document.getElementById('pol-tier2-mode').value;
+    const alertConf = parseFloat(document.getElementById('pol-alert-conf')?.value || '0.85');
+    const blockConf = parseFloat(document.getElementById('pol-block-conf')?.value || '0.90');
+    const madRatio = parseFloat(document.getElementById('pol-mad-ratio')?.value || '0.18');
+    const minBursts = parseInt(document.getElementById('pol-min-bursts')?.value || '8', 10);
+
+    try {
+      const res = await fetch('/api/policies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier0: t0,
+          tier1: t1,
+          tier2: t2,
+          alert_confidence: alertConf,
+          block_confidence: blockConf,
+          max_mad_ratio: madRatio,
+          min_bursts: minBursts
+        })
+      });
+      const data = await res.json();
+      if (data.success && stateData) {
+        stateData.policies = data.policies;
+      }
+    } catch (e) {}
+
     const toast = document.getElementById('policy-save-toast');
     if (toast) {
       const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
       toast.style.display = 'block';
-      toast.innerText = `Policy revision deployed across 32 sensors at ${nowStr} (Tier-0: ${t0}, Tier-1: ${t1}, Tier-2: ${t2}).`;
+      toast.innerText = `Policy revision deployed across 32 sensors at ${nowStr} (Alert >= ${alertConf.toFixed(2)}, Block >= ${blockConf.toFixed(2)}, Tier-0: ${t0}, Tier-1: ${t1}, Tier-2: ${t2}).`;
       setTimeout(() => { toast.style.display = 'none'; }, 5500);
+    }
+  }
+
+  async function applyHostOverride() {
+    if (!stateData || !stateData.selected_host) return;
+    const hostId = stateData.selected_host.host_id;
+    const tier = document.getElementById('hd-override-tier').value;
+    const mode = document.getElementById('hd-override-mode').value;
+
+    try {
+      await fetch('/api/host_override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host_id: hostId, tier: tier, mode: mode })
+      });
+      await fetchState();
+    } catch (e) {}
+
+    const toast = document.getElementById('host-override-toast');
+    if (toast) {
+      toast.style.display = 'block';
+      toast.innerText = `Surgical policy override pushed to ${stateData.selected_host.hostname}: AD Tier=${tier}, Policy=${mode}.`;
+      setTimeout(() => { toast.style.display = 'none'; }, 4500);
     }
   }
 

@@ -379,9 +379,133 @@ def _print_service_startup_banner(agent: object, siem_out: str, console: Optiona
     )
 
 
+def _handle_policy_cli(args: list[str]) -> int:
+    """Executes hierarchical AD Tier & threshold governance commands via 'uncloak policy'."""
+    from rich import box
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+    from urllib import request
+    from uncloak.core.policy import PolicyManager
+
+    p = argparse.ArgumentParser(prog="uncloak policy", description="Uncloak Fleet & Host Governance Policy CLI")
+    sub = p.add_subparsers(dest="action")
+
+    st = sub.add_parser("status", help="Display active fleet thresholds, AD Tier matrix, and host overrides")
+    st.add_argument("--host", default=None, help="Target host_id (defaults to local hostname)")
+    st.add_argument("--json", action="store_true", help="Emit raw policy JSON")
+
+    st_tier = sub.add_parser("set-tier", help="Reassign Active Directory Tier for an endpoint")
+    st_tier.add_argument("--tier", required=True, choices=["0", "1", "2", "Tier-0", "Tier-1", "Tier-2"], help="Target AD Tier")
+    st_tier.add_argument("--host", default=None, help="Target host_id (defaults to local hostname)")
+
+    st_th = sub.add_parser("set-thresholds", help="Tune FlowFeaturesV1 alert & autonomous containment thresholds")
+    st_th.add_argument("--alert", type=float, default=None, help="Alert confidence threshold (0.10-0.99)")
+    st_th.add_argument("--block", type=float, default=None, help="Autonomous block confidence threshold (0.50-0.99)")
+    st_th.add_argument("--mad", type=float, default=None, help="Max IAT MAD/Median ratio (0.01-0.80)")
+    st_th.add_argument("--bursts", type=int, default=None, help="Minimum communication bursts (2-50)")
+
+    ov = sub.add_parser("override", help="Override containment policy or maintenance mode on a host")
+    ov.add_argument("--mode", required=True, choices=["autonomous", "prompt", "audit", "audit_p1", "quorum", "inherit"], help="Containment mode")
+    ov.add_argument("--host", default=None, help="Target host_id (defaults to local hostname)")
+    ov.add_argument("--maintenance", action="store_true", help="Enable maintenance mode (audit-only)")
+    ov.add_argument("--no-maintenance", action="store_true", help="Disable maintenance mode")
+
+    sy = sub.add_parser("sync", help="Fetch latest fleet policy revision from Central SOC Manager")
+    sy.add_argument("--soc-url", default="http://127.0.0.1:8830", help="Central SOC Manager URL")
+
+    if not args:
+        args = ["status"]
+
+    parsed = p.parse_args(args)
+    pm = PolicyManager()
+    out = Console(color_system="truecolor")
+
+    if parsed.action == "status":
+        if getattr(parsed, "json", False):
+            print(json.dumps(pm.state, indent=2))
+            return 0
+
+        th = pm.state.get("thresholds", {})
+        tp = pm.state.get("tier_policies", {})
+        ov_map = pm.state.get("host_overrides", {})
+
+        hdr = Text()
+        hdr.append("POLICY REVISION ", style="bold #94a3b8")
+        hdr.append(f"v{pm.state.get('revision', 1)}", style="bold #10b981")
+        hdr.append(f"  |  Config: {pm.policy_path}\n", style="#64748b")
+        hdr.append(
+            f"Alert Threshold (EID 9001): {th.get('alert_confidence', 0.85):.3f}  |  "
+            f"Block Threshold (EID 9002): {th.get('block_confidence', 0.90):.3f}  |  "
+            f"Max MAD Ratio: {th.get('max_mad_ratio', 0.18):.3f}  |  "
+            f"Min Bursts: {th.get('min_bursts', 8)}",
+            style="#e2e8f0",
+        )
+        out.print(Panel(hdr, title="[bold #f8fafc] Uncloak Governance & Policy Status [/]", box=box.ROUNDED, border_style="#334155"))
+
+        tbl = Table(box=box.ROUNDED, border_style="#334155", header_style="bold #94a3b8", expand=True)
+        tbl.add_column("AD TIER", width=12)
+        tbl.add_column("CONTAINMENT POLICY", width=36)
+        tbl.add_column("HOST OVERRIDES", ratio=1)
+        for tier_name in ("Tier-0", "Tier-1", "Tier-2"):
+            hosts_in_tier = [hid for hid, cfg in ov_map.items() if cfg.get("tier") == tier_name]
+            ov_str = ", ".join(hosts_in_tier) if hosts_in_tier else "None (Inherited)"
+            tbl.add_row(tier_name, tp.get(tier_name, "prompt_analyst"), ov_str)
+        out.print(tbl)
+        return 0
+
+    if parsed.action == "set-tier":
+        res = pm.set_host_override(host_id=parsed.host, tier=parsed.tier)
+        out.print(f"[bold #10b981][+][/] AD Tier reassigned: host={parsed.host or 'local'} -> [bold]{res.get('tier')}[/]")
+        return 0
+
+    if parsed.action == "set-thresholds":
+        res = pm.set_thresholds(
+            alert_confidence=parsed.alert,
+            block_confidence=parsed.block,
+            max_mad_ratio=parsed.mad,
+            min_bursts=parsed.bursts,
+        )
+        out.print(f"[bold #10b981][+][/] Thresholds updated: Alert={res['alert_confidence']:.3f}, Block={res['block_confidence']:.3f}, MAD={res['max_mad_ratio']:.3f}, Bursts={res['min_bursts']}")
+        return 0
+
+    if parsed.action == "override":
+        mode_map = {
+            "autonomous": "auto_wfp",
+            "prompt": "prompt_analyst",
+            "audit": "audit_only",
+            "audit_p1": "audit_p1",
+            "quorum": "quorum",
+            "inherit": "inherit",
+        }
+        maint = True if parsed.maintenance else (False if parsed.no_maintenance else None)
+        res = pm.set_host_override(host_id=parsed.host, mode=mode_map[parsed.mode], maintenance_mode=maint)
+        out.print(f"[bold #10b981][+][/] Host policy override applied: {res or 'Cleared (Inherited)'}")
+        return 0
+
+    if parsed.action == "sync":
+        url = parsed.soc_url.rstrip("/") + "/api/policies"
+        try:
+            with request.urlopen(url, timeout=4.0) as resp:
+                remote_pol = json.loads(resp.read().decode("utf-8"))
+            pm.state.update(remote_pol)
+            pm.save()
+            out.print(f"[bold #10b981][+][/] Synced policy revision v{pm.state.get('revision')} from {url}")
+            return 0
+        except Exception as exc:
+            out.print(f"[bold #ef4444][-][/] Failed to sync policy from {url}: {exc}")
+            return 1
+
+    return 0
+
+
 def main(args: Optional[list[str]] = None) -> int:
     """Unified CLI execution entrypoint."""
     eff_args = sys.argv[1:] if args is None else list(args)
+    if eff_args and eff_args[0] == "policy":
+        return _handle_policy_cli(eff_args[1:])
+
     if "-h" in eff_args or "--help" in eff_args:
         _print_rich_help()
         return 0
