@@ -22,8 +22,12 @@ from urllib import request
 import psutil
 
 from uncloak.attribution.identity import classify_path
+from uncloak.attribution.cache import SocketAttributionCache
 from uncloak.attribution.trust import verify_authenticode
+from uncloak.capture.live import LivePacketCapture
 from uncloak.core.models import FlowSession
+from uncloak.core.policy import PolicyManager
+from uncloak.detection.model import C2Predictor
 from uncloak.export.siem import (
     EVENT_ID_C2_DETECTED,
     EVENT_ID_CONTAINMENT_EXECUTED,
@@ -34,6 +38,7 @@ from uncloak.export.siem import (
 )
 from uncloak.mitigation.eviction import sever_tcp_connection
 from uncloak.mitigation.firewall import block_application_destination
+from uncloak.storage.database import TelemetryDatabase
 
 logger = logging.getLogger("uncloak.agent")
 
@@ -46,9 +51,9 @@ class UncloakAgentService:
         manager_url: str = "http://127.0.0.1:8443",
         auth_token: Optional[str] = None,
         heartbeat_interval: float = 15.0,
+        db_path: str = "uncloak.db",
     ) -> None:
         self.manager_url = manager_url.rstrip("/")
-        # Resolve authentication token dynamically; avoid hardcoded static secrets
         self.auth_token = (
             auth_token
             or os.environ.get("UNCLOAK_AGENT_TOKEN")
@@ -61,6 +66,11 @@ class UncloakAgentService:
         self.ip_address = self._resolve_primary_ip()
         self._lock = threading.Lock()
         self._active_sessions: dict[str, FlowSession] = {}
+        self.socket_cache = SocketAttributionCache(ttl_seconds=30.0)
+        self.policy_manager = PolicyManager()
+        self.predictor = C2Predictor()
+        self.live_capture = LivePacketCapture(local_ips={self.ip_address, "127.0.0.1"})
+        self.telemetry_db = TelemetryDatabase(db_path=db_path)
 
     def _resolve_primary_ip(self) -> str:
         """Determines the primary local IP address without external DNS calls."""
@@ -87,16 +97,114 @@ class UncloakAgentService:
             self._telemetry_worker()
 
     def stop(self) -> None:
-        """Gracefully halts the agent service."""
+        """Gracefully halts the agent service and live packet sniffer."""
         self.is_running = False
+        self.live_capture.stop()
+
+    def evaluate_live_flows(self, min_bursts: Optional[int] = None) -> list[dict[str, Any]]:
+        """Runs attribution, ML scoring, policy enforcement, and DB persistence on ready flows."""
+        eff_pol = self.policy_manager.get_effective_policy(self.host_id)
+        thresholds = eff_pol["thresholds"]
+        req_bursts = min_bursts if min_bursts is not None else int(thresholds.get("min_bursts", 8))
+        alert_conf = float(thresholds.get("alert_confidence", 0.85))
+        block_conf = float(thresholds.get("block_confidence", 0.90))
+
+        findings: list[dict[str, Any]] = []
+        for state, features in self.live_capture.extract_ready_flows(min_bursts=req_bursts):
+            attr = self.socket_cache.lookup(
+                local_ip=state.local_ip,
+                local_port=state.last_local_port,
+                remote_ip=state.dst_ip,
+                remote_port=state.dst_port,
+            )
+            if attr is not None:
+                from dataclasses import replace
+                features = replace(
+                    features,
+                    proc_signed=1 if attr.is_signed else 0,
+                    proc_path_class=attr.path_class,
+                )
+
+            pred = self.predictor.predict_flow(features)
+            score = float(pred.get("threat_score", 0.0))
+            if score < alert_conf:
+                continue
+
+            pid = attr.pid if attr else 0
+            proc_name = attr.process_name if attr else "unknown"
+            exe_path = attr.executable_path if attr else ""
+            proc_guid = attr.process_guid if attr else ""
+            proc_sha256 = attr.sha256 if attr else ""
+
+            verdict = "CRITICAL" if score >= block_conf else "HIGH"
+            self.telemetry_db.insert_flow(
+                flow_id=state.flow_key,
+                pid=pid,
+                process_name=proc_name,
+                exe_path=exe_path,
+                src_ip=state.local_ip,
+                src_port=state.last_local_port,
+                dst_ip=state.dst_ip,
+                dst_port=state.dst_port,
+                threat_score=score,
+                verdict=verdict,
+                features={
+                    "iat_median": features.iat_median,
+                    "iat_mad_ratio": features.iat_mad_ratio,
+                    "sni": state.sni,
+                    "ja4": state.ja4,
+                    "process_guid": proc_guid,
+                    "process_sha256": proc_sha256,
+                },
+            )
+
+            mitigated = False
+            can_auto = (
+                eff_pol["effective_mode"] in ("auto_wfp", "auto_sever")
+                and not eff_pol["maintenance_mode"]
+                and score >= block_conf
+            )
+            if can_auto:
+                severed = sever_tcp_connection(state.local_ip, state.last_local_port, state.dst_ip, state.dst_port)
+                blocked = True
+                if exe_path:
+                    blocked = block_application_destination(
+                        rule_name=f"Uncloak_Auto_{state.dst_ip}",
+                        program_path=exe_path,
+                        remote_ip=state.dst_ip,
+                    )
+                mitigated = severed and blocked
+                self.telemetry_db.record_mitigation(
+                    action_id=f"mit-{state.flow_key}-{int(time.time())}",
+                    action_type="AUTONOMOUS_SEVER_WFP",
+                    target_pid=pid,
+                    target_destination=f"{state.dst_ip}:{state.dst_port}",
+                    success=mitigated,
+                    details=f"guid={proc_guid} sha256={proc_sha256}",
+                )
+
+            findings.append({
+                "flow_key": state.flow_key,
+                "pid": pid,
+                "process_name": proc_name,
+                "process_guid": proc_guid,
+                "process_sha256": proc_sha256,
+                "ja4": state.ja4,
+                "sni": state.sni,
+                "threat_score": score,
+                "mitigated": mitigated,
+                "effective_mode": eff_pol["effective_mode"],
+            })
+        return findings
 
     def _telemetry_worker(self) -> None:
-        """Continuous background loop dispatching heartbeats and collecting socket table diffs."""
+        """Continuous background loop evaluating live flows and dispatching heartbeats."""
         while self.is_running:
             try:
+                self.evaluate_live_flows()
                 self._send_heartbeat()
             except Exception as exc:
-                logger.debug("Heartbeat transmission error: %s", exc)
+                logger.debug("Telemetry cycle error: %s", exc)
             time.sleep(self.heartbeat_interval)
 
     def _collect_local_telemetry(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

@@ -2,6 +2,10 @@
 Host-Level Win32 Attribution & Process Identity Package for Uncloak.
 """
 
+from uncloak.attribution.cache import (
+    CachedSocketAttribution,
+    SocketAttributionCache,
+)
 from uncloak.attribution.identity import (
     classify_path,
     generate_process_guid,
@@ -14,6 +18,8 @@ from uncloak.attribution.table import (
 from uncloak.attribution.trust import verify_authenticode
 
 __all__ = [
+    "CachedSocketAttribution",
+    "SocketAttributionCache",
     "classify_path",
     "generate_process_guid",
     "get_file_sha256",
