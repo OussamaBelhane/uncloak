@@ -28,6 +28,7 @@ from scapy.layers.inet import IP, TCP, UDP  # type: ignore[import-untyped]
 from scapy.utils import PcapReader  # type: ignore[import-untyped]
 
 from uncloak.capture.burst import BurstAggregator
+from uncloak.capture.ja4 import parse_tls_client_hello
 from uncloak.core.models import FlowFeaturesV1
 from uncloak.detection.model import C2Predictor
 from uncloak.export.siem import EVENT_ID_C2_DETECTED, build_ocsf_detection_event
@@ -46,27 +47,6 @@ class PcapFlowAnalysis:
     duration_sec: float
     features: FlowFeaturesV1
     prediction: dict[str, Any]
-
-
-def _extract_tls_sni_ascii(payload: bytes) -> Optional[str]:
-    """Lightweight parser extracting ASCII SNI extension hostname from TLS ClientHello payloads."""
-    if len(payload) < 43 or payload[0] != 0x16 or payload[5] != 0x01:
-        return None
-    # Scan for server_name extension (0x00 0x00) + name_type host_name (0x00)
-    idx = payload.find(b"\x00\x00")
-    while idx != -1 and idx + 9 < len(payload):
-        if payload[idx + 6] == 0x00:
-            name_len = int.from_bytes(payload[idx + 7:idx + 9], "big")
-            if 4 <= name_len <= 128 and idx + 9 + name_len <= len(payload):
-                candidate = payload[idx + 9:idx + 9 + name_len]
-                try:
-                    host = candidate.decode("ascii")
-                    if "." in host and all(c.isalnum() or c in ".-_" for c in host):
-                        return host
-                except UnicodeDecodeError:
-                    pass
-        idx = payload.find(b"\x00\x00", idx + 2)
-    return None
 
 
 def analyze_pcap_detailed(
@@ -153,9 +133,9 @@ def analyze_pcap_detailed(
             meta["bytes"] += payload_len
 
             if is_outbound and payload_len > 40 and flow_key not in flow_sni:
-                sni_host = _extract_tls_sni_ascii(raw_payload)
-                if sni_host:
-                    flow_sni[flow_key] = sni_host
+                hello_info = parse_tls_client_hello(raw_payload)
+                if hello_info and hello_info.sni:
+                    flow_sni[flow_key] = hello_info.sni
 
             flow_aggregators[flow_key].ingest_packet(
                 timestamp=timestamp,

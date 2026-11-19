@@ -28,7 +28,7 @@ def test_firewall_validation() -> None:
     assert res_bad is False
 
     # Valid IPv4 should proceed to execution (mocked to avoid requiring Windows admin elevation)
-    with patch("subprocess.run") as mock_run:
+    with patch("sys.platform", "win32"), patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="Ok.", stderr="")
         res_good = block_application_destination(
             rule_name="TestGood",
@@ -42,7 +42,7 @@ def test_firewall_validation() -> None:
         assert "action=block" in called_args
 
     # Rule deletion cleanup (mocked)
-    with patch("subprocess.run") as mock_run:
+    with patch("sys.platform", "win32"), patch("subprocess.run") as mock_run:
         mock_run.return_value = MagicMock(returncode=0, stdout="Ok.", stderr="")
         res_del = remove_containment_rule("TestGood")
         assert res_del is True
